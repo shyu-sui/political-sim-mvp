@@ -172,9 +172,9 @@ export default function Timeline() {
         <div className="tl-stat">
           <span>リベラル</span><strong>{opinion.liberal}</strong>
         </div>
-        <div className="tl-stat">
+        {/* <div className="tl-stat">
           <span>無関心</span><strong>{opinion.apathetic}</strong>
-        </div>
+        </div> */}
       </div>
       {/* ヘッダー / フィルター */}
       <div className="tl-header">

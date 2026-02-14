@@ -88,6 +88,10 @@
 .tl-date {
   font-size: 12px;
   color: #64748b;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 2px 6px;
+
 }
 
 .tl-cat {
@@ -169,6 +173,7 @@
 .tl-item,
 .tl-statusbar {
   /* overflow-x: hidden; */
+  position: sticky;
   flex-wrap: wrap;         /* 画面が極端に狭い時は折り返して保護 */
   gap: 12px;
   color: #0f172a; /* テキストを濃いグレーに */
@@ -198,6 +203,16 @@
   max-width: 100%;
 }
 
+/* 重要イベントの協調 */
+.tl-item.good {
+  border-color: #86efac; /* 緑系 */
+  box-shadow: 0 1px 0 rgba(16,185,129,.15);
+}
+.tl-item.bad {
+  border-color: #fecaca; /* 赤系 */
+  box-shadow: 0 1px 0 rgba(239,68,68,.15);
+}
+
 .tl-title-row, .tl-desc {
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -206,4 +221,28 @@
 /* 縦のスクロール領域を制限（画面外へ飛びにくく） */
 .tl-list {
   max-height: 60vh; /* 必要に応じて 50〜70vh 程度で調整 */
+}
+
+/* 次の日ボタン */
+.tl-nextday {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #e2e8f0;
+  cursor: pointer;
+}
+.tl-nextday:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* カードのアニメ */
+@keyframes tl-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tl-item {
+  animation: tl-fade-in 160ms ease-out;
 }

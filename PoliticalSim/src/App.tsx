@@ -7,8 +7,8 @@ import Timeline from './components/TimeLine.tsx';
 
 function App() {
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
-      <h1>政治シミュレーション（仮）</h1>
+    <div className="page">
+      <h2>政治シミュレーション（仮）</h2>
       <Timeline />
     </div>
   );

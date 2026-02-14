@@ -246,3 +246,24 @@
 .tl-item {
   animation: tl-fade-in 160ms ease-out;
 }
+
+/* 選挙バナー（タイムライン上部の常時導線） */
+.tl-electionbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #fff7ed;           /* 薄いオレンジ系 */
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+}
+.tl-electionbar-actions { display: flex; gap: 8px; margin-left: auto; }
+.tl-electionbar-actions button {
+  padding: 6px 10px;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  background: #ffedd5;
+  cursor: pointer;
+}
+.tl-electionbar-actions button:hover { background: #fed7aa; }
+.tl-item.tl-election { border-color: #fdba74; }

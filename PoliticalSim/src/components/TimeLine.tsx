@@ -3,6 +3,13 @@ import React, { useMemo, useState } from 'react';
 import './timeline.css';
 import { FiZap, FiUsers, FiTwitter, FiGlobe, FiBell } from 'react-icons/fi';
 
+import {
+  initialElectionState, announceElection, joinElection, leaveElection,
+  openVoting, computeResult, type ElectionState
+} from './election/electionLogic.ts'; // ← パスは環境に合わせて
+import ElectionBanner from './election/ElectionBanner.tsx';
+import ElectionCard from './election/ElectionCard';
+
 export type EventCategory = 'news' | 'sns' | 'friend' | 'action' | 'system';
 export type Impact = 'good' | 'bad' | 'neutral';
 export type TimelineEvent = {
@@ -104,66 +111,72 @@ const impactLabel: Record<Impact, string> = { good: '好影響', bad: '悪影響
 const impactColor: Record<Impact, string> = { good: '#38a169', bad: '#e53e3e', neutral: '#718096' };
 
 export default function Timeline() {
-  const [events, setEvents] = useState<TimelineEvent[]>(initialEvents);
+    const [events, setEvents] = useState<TimelineEvent[]>(initialEvents);
 
-  // 62: 友達リスト
-  const [friends, setFriends] = useState<Friend[]>(makeInitialFriends());
+    // 62: 友達リスト
+    const [friends, setFriends] = useState<Friend[]>(makeInitialFriends());
+    
+    // 67: SNSフォロワー
+    const [followers, setFollowers] = useState<number>(randRange(80, 150));
+
+
+    // 55: ステータスを useState 管理（初期値は50基準）
+    const [status, setStatus] = useState<PlayerStatus>({
+      comm: 50,
+      credibility: 50,
+      energy: 80,
+    });
+
+    // 59: 世論を useState 管理（合計200目安にしてバランス取りやすく）
+    const [opinion, setOpinion] = useState<PublicOpinion>({
+      conservative: 70,
+      liberal: 70,
+      apathetic: 60,
+    });
+
+    // 2) useState の型を Filter に
+    const [filter, setFilter] = useState<Filter>('all');
+
+    // 選挙
+    const [election, setElection] = useState<ElectionState>(initialElectionState());
+    const filtered = useMemo(
+      () => (filter === 'all' ? events : events.filter((e) => e.category === filter)),
+      [events, filter]
+    );
+
+    // 3) onChange のイベント型を明示して、Filter へ安全代入
+    const handleFilterChange: React.ChangeEventHandler<HTMLSelectElement> = (e) => {
+      const v = e.currentTarget.value as Filter; // value は string なので Filter にキャスト
+      setFilter(v);
+    };
+
+    // 汎用関数 & 日付/アクションポイント ---
+    const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+    const [day, setDay] = useState<number>(1);
+    const [ap, setAp] = useState<number>(3);
+
+    // 選挙用
+    const DAY_PER_MONTH = 2;
+    const [month, setMonth] = useState<number>(1);
+    const [year, setYear] = useState<number>(1);
+
   
-  // 67: SNSフォロワー
-  const [followers, setFollowers] = useState<number>(randRange(80, 150));
-
-
-  // 55: ステータスを useState 管理（初期値は50基準）
-  const [status, setStatus] = useState<PlayerStatus>({
-    comm: 50,
-    credibility: 50,
-    energy: 80,
-  });
-
-  // 59: 世論を useState 管理（合計200目安にしてバランス取りやすく）
-  const [opinion, setOpinion] = useState<PublicOpinion>({
-    conservative: 70,
-    liberal: 70,
-    apathetic: 60,
-  });
-
-  // 2) useState の型を Filter に
-  const [filter, setFilter] = useState<Filter>('all');
-
-  const filtered = useMemo(
-    () => (filter === 'all' ? events : events.filter((e) => e.category === filter)),
-    [events, filter]
-  );
-
-  // 3) onChange のイベント型を明示して、Filter へ安全代入
-  const handleFilterChange: React.ChangeEventHandler<HTMLSelectElement> = (e) => {
-    const v = e.currentTarget.value as Filter; // value は string なので Filter にキャスト
-    setFilter(v);
-  };
-
-  // 汎用関数 & 日付/アクションポイント ---
-  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-  const [day, setDay] = useState<number>(1);
-  const [ap, setAp] = useState<number>(3);
-
-  
-  const fmt0 = (n: number) => Math.round(n).toString();      // 小数点なし
+    const fmt0 = (n: number) => Math.round(n).toString();      // 小数点なし
 //   const fmt1 = (n: number) => Number(n).toFixed(1);          // 1桁だけ見せたいとき用
 
     //次の日へ
-    // 79: 次の日へ（AP=0で押下可）
     const nextDay = () => {
-      if (ap > 0) return;                      // 安全策
+      if (ap > 0) return; // AP残ありなら進めない
+
       // 日次ノイズ（±1）
       const drift = () => (Math.random() < 0.5 ? -1 : 1);
-
       setOpinion((o) => ({
         conservative: clamp(o.conservative + drift(), 0, 100),
         liberal:      clamp(o.liberal      + drift(), 0, 100),
         apathetic:    clamp(o.apathetic    + drift(), 0, 100),
       }));
 
-      // 高確率でニュース（1件）
+      // 通常ニュース（高確率）
       const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
       if (Math.random() <= 0.9) {
         setOpinion((o) => ({
@@ -174,7 +187,7 @@ export default function Timeline() {
         setEvents((prev) => [
           {
             id: crypto.randomUUID(),
-            date: `Day ${day + 1}`, // 翌日のラベル
+            date: `Day ${day + 1}`,
             category: 'news',
             title: spec.title,
             description: spec.desc,
@@ -189,22 +202,87 @@ export default function Timeline() {
         ]);
       }
 
-      // タイムラインに日替わりログ（任意）
+      // ★ 月末なら「選挙公示」
+      const next = day + 1;
+      const isMonthEnd = next > DAY_PER_MONTH;
+      if (isMonthEnd) {
+        // 公示状態へ
+        setElection(prev => announceElection(prev, month, year));
+
+        // タイムラインに「選挙が公示されました」を追加
+        setEvents((prev) => [
+          {
+            id: crypto.randomUUID(),
+            date: `Month ${month}, Year ${year}`,
+            category: 'system',
+            title: '選挙が公示されました（参加可能）',
+            description: '上部のバナー、またはこのカードから参加／投票へ移動できます。',
+            impact: 'neutral',
+          },
+          ...prev,
+        ]);
+
+        // カレンダー進行（翌月へ）
+        setDay(1);
+        setMonth((m) => {
+          const newMonth = m === 12 ? 1 : m + 1;
+          if (m === 12) setYear((y) => y + 1);
+          return newMonth;
+        });
+      } else {
+        // 月途中
+        setDay(next);
+      }
+
+      // 日替わりログ（任意）
       setEvents((prev) => [
-        {
-          id: crypto.randomUUID(),
-          date: `Day ${day + 1}`,
-          category: 'system',
-          title: '新しい一日が始まりました',
-          description: '世論が日々の話題でわずかに揺れています。',
-          impact: 'neutral',
-        },
-        ...prev,
+            {
+              id: crypto.randomUUID(),
+              date: isMonthEnd ? `Day 1 / Month ${month === 12 ? 1 : month + 1}` : `Day ${day + 1}`,
+              category: 'system',
+              title: '新しい一日が始まりました',
+              description: '世論が日々の話題でわずかに揺れています。',
+              impact: 'neutral',
+            },
+            ...prev,
       ]);
 
-      // 進行
-      setDay((d) => d + 1);
+      // APリセット
       setAp(3);
+    };
+
+        // 選挙ハンドラ
+        const handleElectionJoin = () => setElection(prev => joinElection(prev));
+        const handleElectionLeave = () => setElection(prev => leaveElection(prev));
+        const handleElectionVote = () => {
+        // phase を voting に
+        setElection(prev => openVoting(prev));
+        // 投票→結果計算→結果カードをタイムラインに追加
+        setElection(prev => {
+            const next = computeResult(prev, {
+                conservative: opinion.conservative,
+                liberal: opinion.liberal,
+                apathetic: opinion.apathetic,
+                credibility: status.credibility,
+                comm: status.comm,
+                followers,
+            });
+            if (next.lastResult) {
+                const { won, turnout, voteShare } = next.lastResult;
+                setEvents(prevEvents => [
+                  {
+                    id: crypto.randomUUID(),
+                    date: `Month ${month}, Year ${year}`,
+                    category: 'system',
+                    title: `選挙結果：${won ? '当選' : '惜敗'}`,
+                    description: `投票率 ${turnout}% / 得票率 ${voteShare}%`,
+                    impact: won ? 'good' : 'bad',
+                  },
+                  ...prevEvents,
+                ]);
+            }
+            return next;
+        });
     };
   // NEWS
   const NEWS_POOL: NewsSpec[] = [
@@ -381,8 +459,13 @@ export default function Timeline() {
         </div>
         <div className="tl-stat"><span>Day</span><strong>{fmt0(day)}</strong></div>
         <div className="tl-stat"><span>AP</span><strong>{fmt0(ap)}</strong></div>
-
       </div>
+        <ElectionBanner
+          state={election}
+          onJoin={handleElectionJoin}
+          onLeave={handleElectionLeave}
+          onOpenVoting={handleElectionVote}
+        />
       {/* ヘッダー / フィルター */}
       <div className="tl-header">
         <h2 className="tl-title">タイムライン</h2>
@@ -437,6 +520,14 @@ export default function Timeline() {
 
       {/* 73: スクロール領域 */}
       <div className="tl-list">
+        {election.phase === 'announced' && (
+          <ElectionCard
+            dateLabel={`Month ${election.month}, Year ${election.year}`}
+            onJoin={handleElectionJoin}
+            onOpenVoting={handleElectionVote}
+          />
+        )}
+
         {filtered.map((ev) => {
           const meta = categoryMeta[ev.category];
           const Icon = meta.Icon;

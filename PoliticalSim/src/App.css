@@ -16,12 +16,12 @@
 }
 
 /* ↓ Vite テンプレの中心寄せは基本オフ（必要なら消す） */
-#root {
+/* #root { */
   /* max-width: 1280px;  ← 不要なら削る */
   /* margin: 0 auto;     ← .page 側で管理するので削る */
   /* padding: 2rem;      ← .page 側で管理するので削る */
   /* text-align: center; ← これが“全部中央寄せ”の原因。削除 */
-}
+/* } */
 
 /* 残したいテンプレの装飾は必要なものだけ残してOK */
 .logo { height: 6em; padding: 1.5em; will-change: filter; transition: filter 300ms; }

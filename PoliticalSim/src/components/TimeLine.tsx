@@ -143,7 +143,7 @@ export default function Timeline() {
 
   
   const fmt0 = (n: number) => Math.round(n).toString();      // 小数点なし
-  const fmt1 = (n: number) => Number(n).toFixed(1);          // 1桁だけ見せたいとき用
+//   const fmt1 = (n: number) => Number(n).toFixed(1);          // 1桁だけ見せたいとき用
 
   // NEWS
   const NEWS_POOL: NewsSpec[] = [

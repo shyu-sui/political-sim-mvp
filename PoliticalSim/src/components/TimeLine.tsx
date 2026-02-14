@@ -141,10 +141,71 @@ export default function Timeline() {
     setFilter(v);
   };
 
+  // 汎用関数 & 日付/アクションポイント ---
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const [day, setDay] = useState<number>(1);
+  const [ap, setAp] = useState<number>(3);
+
   
   const fmt0 = (n: number) => Math.round(n).toString();      // 小数点なし
 //   const fmt1 = (n: number) => Number(n).toFixed(1);          // 1桁だけ見せたいとき用
 
+    //次の日へ
+    // 79: 次の日へ（AP=0で押下可）
+    const nextDay = () => {
+      if (ap > 0) return;                      // 安全策
+      // 日次ノイズ（±1）
+      const drift = () => (Math.random() < 0.5 ? -1 : 1);
+
+      setOpinion((o) => ({
+        conservative: clamp(o.conservative + drift(), 0, 100),
+        liberal:      clamp(o.liberal      + drift(), 0, 100),
+        apathetic:    clamp(o.apathetic    + drift(), 0, 100),
+      }));
+
+      // 高確率でニュース（1件）
+      const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
+      if (Math.random() <= 0.9) {
+        setOpinion((o) => ({
+          conservative: clamp(o.conservative + (spec.effect.conservative ?? 0), 0, 100),
+          liberal:      clamp(o.liberal      + (spec.effect.liberal ?? 0),      0, 100),
+          apathetic:    clamp(o.apathetic    + (spec.effect.apathetic ?? 0),    0, 100),
+        }));
+        setEvents((prev) => [
+          {
+            id: crypto.randomUUID(),
+            date: `Day ${day + 1}`, // 翌日のラベル
+            category: 'news',
+            title: spec.title,
+            description: spec.desc,
+            impact: 'neutral',
+            delta: {
+              cons: spec.effect.conservative !== undefined ? Number((spec.effect.conservative).toFixed(1)) : undefined,
+              lib:  spec.effect.liberal      !== undefined ? Number((spec.effect.liberal).toFixed(1))      : undefined,
+              apa:  spec.effect.apathetic    !== undefined ? Number((spec.effect.apathetic).toFixed(1))    : undefined,
+            },
+          },
+          ...prev,
+        ]);
+      }
+
+      // タイムラインに日替わりログ（任意）
+      setEvents((prev) => [
+        {
+          id: crypto.randomUUID(),
+          date: `Day ${day + 1}`,
+          category: 'system',
+          title: '新しい一日が始まりました',
+          description: '世論が日々の話題でわずかに揺れています。',
+          impact: 'neutral',
+        },
+        ...prev,
+      ]);
+
+      // 進行
+      setDay((d) => d + 1);
+      setAp(3);
+    };
   // NEWS
   const NEWS_POOL: NewsSpec[] = [
     { title: '経済指標が改善',   desc: '市況がやや持ち直しムード。', effect: { conservative: +0.5, liberal: +0.5, apathetic: -0.5 } },
@@ -152,31 +213,36 @@ export default function Timeline() {
     { title: '災害対応が迅速',     desc: '政府への信頼がわずかに上向く。', effect: { conservative: +0.8, liberal: +0.3, apathetic: -0.6 } },
     { title: '外交会談が難航',     desc: '国際関係の先行きに不安。',     effect: { conservative: -0.6, liberal: -0.6, apathetic: +0.6 } },
   ];
-  function maybePushNews(prob = 0.3) {
-    if (Math.random() > prob) return;
-  
-    const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
-  
-    setOpinion((o) => ({
-      conservative: Math.max(0, Math.min(100, o.conservative + (spec.effect.conservative ?? 0))),
-      liberal:      Math.max(0, Math.min(100, o.liberal      + (spec.effect.liberal ?? 0))),
-      apathetic:    Math.max(0, Math.min(100, o.apathetic    + (spec.effect.apathetic ?? 0))),
-    }));
-  
-    const date = `Day ${Math.ceil((events.length + 1) / 2)}`;
-    setEvents((prev) => [
-      {
-        id: crypto.randomUUID(),
-        date,
-        category: 'news',
-        title: spec.title,
-        description: spec.desc,
-        impact: 'neutral',
-      },
-      ...prev,
-    ]);
-  }
-  const addActionEvent = (type: 'vote' | 'talk' | 'post') => {
+    function maybePushNews(prob = 0.3) {
+      if (Math.random() > prob) return;
+    
+      const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
+      // 世論反映
+      setOpinion((o) => ({
+        conservative: clamp(o.conservative + (spec.effect.conservative ?? 0), 0, 100),
+        liberal:      clamp(o.liberal      + (spec.effect.liberal ?? 0),      0, 100),
+        apathetic:    clamp(o.apathetic    + (spec.effect.apathetic ?? 0),    0, 100),
+      }));
+      const date = `Day ${day}`; // ここは現在の day
+      setEvents((prev) => [
+          {
+            id: crypto.randomUUID(),
+            date,
+            category: 'news',
+            title: spec.title,
+            description: spec.desc,
+            impact: 'neutral',
+            // 71: バッジにも差分を出す（小数1桁丸め）
+            delta: {
+              cons: spec.effect.conservative !== undefined ? Number((spec.effect.conservative).toFixed(1)) : undefined,
+              lib:  spec.effect.liberal      !== undefined ? Number((spec.effect.liberal).toFixed(1))      : undefined,
+              apa:  spec.effect.apathetic    !== undefined ? Number((spec.effect.apathetic).toFixed(1))    : undefined,
+            },
+          },
+          ...prev,
+      ]);
+    }
+    const addActionEvent = (type: 'vote' | 'talk' | 'post') => {
     const date = `Day ${Math.ceil((events.length + 1) / 2)}`;
     if (type === 'vote') {
       const deltaApa = -3;
@@ -196,6 +262,7 @@ export default function Timeline() {
         ...prev,
       ]);
       maybePushNews(); // 行動後に 30% でニュース発生
+      setAp((x) => Math.max(0, x - 1)); //AP消費
     } else if (type === 'talk') {
       // 選択UIで先頭の友達が「話す相手」
       const target = friends[0] ?? friends[Math.floor(Math.random() * friends.length)];
@@ -240,6 +307,7 @@ export default function Timeline() {
         ...prev,
       ]);
       maybePushNews(); // 行動後に 30% でニュース発生
+      setAp((x) => Math.max(0, x - 1)); //AP消費
     } else {
       const bad = Math.random() < 0.15;
 
@@ -283,6 +351,7 @@ export default function Timeline() {
         ...prev,
       ]);
       maybePushNews(); // 行動後に 30% でニュース発生
+      setAp((x) => Math.max(0, x - 1)); //AP消費
     }
   };
 
@@ -310,6 +379,9 @@ export default function Timeline() {
         <div className="tl-stat">
           <span>無関心</span><strong>{fmt0(opinion.apathetic)}</strong>
         </div>
+        <div className="tl-stat"><span>Day</span><strong>{fmt0(day)}</strong></div>
+        <div className="tl-stat"><span>AP</span><strong>{fmt0(ap)}</strong></div>
+
       </div>
       {/* ヘッダー / フィルター */}
       <div className="tl-header">
@@ -369,7 +441,7 @@ export default function Timeline() {
           const meta = categoryMeta[ev.category];
           const Icon = meta.Icon;
           return (
-            <div className="tl-item" key={ev.id}>
+            <div className={`tl-item ${ev.impact === 'good' ? 'good' : ev.impact === 'bad' ? 'bad' : ''}`} key={ev.id}>
               <div className="tl-icon" style={{ backgroundColor: meta.color }}>
                 <Icon size={18} />
               </div>
@@ -404,12 +476,17 @@ export default function Timeline() {
         )}
       </div>
 
-      {/* 50〜53: 行動ボタン（仮） */}
-      <div className="tl-actions">
-        <button onClick={() => addActionEvent('vote')}>投票に行く</button>
-        <button onClick={() => addActionEvent('talk')}>友達と話す</button>
-        <button onClick={() => addActionEvent('post')}>SNSに投稿</button>
-      </div>
+        {/* 50〜53: 行動ボタン（仮） */}
+        <div className="tl-actions">
+          <button onClick={() => addActionEvent('vote')}>投票に行く</button>
+          <button onClick={() => addActionEvent('talk')}>友達と話す</button>
+          <button onClick={() => addActionEvent('post')}>SNSに投稿</button>
+        </div>
+
+        <button className="tl-nextday" onClick={nextDay} disabled={ap>0}>
+          次の日へ（Day {day + 1}）
+        </button>
+
     </div>
   );
 }

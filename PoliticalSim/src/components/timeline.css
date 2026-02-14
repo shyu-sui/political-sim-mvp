@@ -135,3 +135,45 @@
 .tl-stat span { color: #64748b; font-size: 12px; }
 .tl-stat strong { font-size: 16px; }
 .tl-divider { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
+
+
+/* ===== 明示的にダーク文字にする（白背景で見えるように） ===== */
+.tl-container,
+.tl-item,
+.tl-statusbar {
+  color: #0f172a; /* テキストを濃いグレーに */
+}
+
+/* 見出し・本文・数値の色を明確化 */
+.tl-title,
+.tl-title-row,
+.tl-desc,
+.tl-stat strong {
+  color: #0f172a;
+}
+
+/* select と option の文字が見えない問題に対応（白背景に黒文字） */
+.tl-filter select,
+.tl-filter option {
+  color: #0f172a;
+  background: #ffffff;
+}
+
+/* バッジは白文字のままでOK（背景色が付いているため） */
+.tl-badge { color: #ffffff; }
+
+/* ==== 横はみ出し対策 ==== */
+.tl-container, .tl-item, .tl-list {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.tl-title-row, .tl-desc {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 縦のスクロール領域を制限（画面外へ飛びにくく） */
+.tl-list {
+  max-height: 60vh; /* 必要に応じて 50〜70vh 程度で調整 */
+}

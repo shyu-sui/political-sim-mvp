@@ -10,6 +10,11 @@
   background: #0f172a0a; /* 薄い背景 */
   border-radius: 12px;
   border: 1px solid #e2e8f0;
+
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box; /* ← padding/border を幅に含める */
+
 }
 
 .tl-header {

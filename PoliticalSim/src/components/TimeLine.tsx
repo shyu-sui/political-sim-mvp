@@ -3,12 +3,22 @@ import React, { useMemo, useState } from 'react';
 import './timeline.css';
 import { FiZap, FiUsers, FiTwitter, FiGlobe, FiBell } from 'react-icons/fi';
 
+import { TUNING } from './config/tuning';
+
 import {
   initialElectionState, announceElection, joinElection, leaveElection,
   openVoting, computeResult, type ElectionState
 } from './election/electionLogic.ts'; // ← パスは環境に合わせて
 import ElectionBanner from './election/ElectionBanner.tsx';
 import ElectionCard from './election/ElectionCard';
+
+// 人生イベント
+import { rollLifeEvent } from './life/lifeEventsLogic';
+// import LifeEventCard from './life/LifeEventCard';
+
+// クリア/ゲームオーバー
+import { checkGameState } from './finish/gameState';
+import FinishBanner from './finish/FinishBanner';
 
 export type EventCategory = 'news' | 'sns' | 'friend' | 'action' | 'system';
 export type Impact = 'good' | 'bad' | 'neutral';
@@ -156,99 +166,151 @@ export default function Timeline() {
     const [ap, setAp] = useState<number>(3);
 
     // 選挙用
-    const DAY_PER_MONTH = 2;
     const [month, setMonth] = useState<number>(1);
     const [year, setYear] = useState<number>(1);
 
-  
+    // ゲームオーバー/クリア
+    const [isGameOver, setIsGameOver] = useState(false);
+    const [isCleared, setIsCleared] = useState(false);
+
     const fmt0 = (n: number) => Math.round(n).toString();      // 小数点なし
 //   const fmt1 = (n: number) => Number(n).toFixed(1);          // 1桁だけ見せたいとき用
 
     //次の日へ
     const nextDay = () => {
-      if (ap > 0) return; // AP残ありなら進めない
+        if (ap > 0) return; // AP残ありなら進めない
 
-      // 日次ノイズ（±1）
-      const drift = () => (Math.random() < 0.5 ? -1 : 1);
-      setOpinion((o) => ({
-        conservative: clamp(o.conservative + drift(), 0, 100),
-        liberal:      clamp(o.liberal      + drift(), 0, 100),
-        apathetic:    clamp(o.apathetic    + drift(), 0, 100),
-      }));
-
-      // 通常ニュース（高確率）
-      const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
-      if (Math.random() <= 0.9) {
+        // 日次ノイズ（±1）
+        const drift = () => (Math.random() < 0.5 ? -1 : 1);
         setOpinion((o) => ({
-          conservative: clamp(o.conservative + (spec.effect.conservative ?? 0), 0, 100),
-          liberal:      clamp(o.liberal      + (spec.effect.liberal ?? 0),      0, 100),
-          apathetic:    clamp(o.apathetic    + (spec.effect.apathetic ?? 0),    0, 100),
+          conservative: clamp(o.conservative + drift(), 0, 100),
+          liberal:      clamp(o.liberal      + drift(), 0, 100),
+          apathetic:    clamp(o.apathetic    + drift(), 0, 100),
         }));
-        setEvents((prev) => [
-          {
-            id: crypto.randomUUID(),
-            date: `Day ${day + 1}`,
-            category: 'news',
-            title: spec.title,
-            description: spec.desc,
-            impact: 'neutral',
-            delta: {
-              cons: spec.effect.conservative !== undefined ? Number((spec.effect.conservative).toFixed(1)) : undefined,
-              lib:  spec.effect.liberal      !== undefined ? Number((spec.effect.liberal).toFixed(1))      : undefined,
-              apa:  spec.effect.apathetic    !== undefined ? Number((spec.effect.apathetic).toFixed(1))    : undefined,
-            },
-          },
-          ...prev,
-        ]);
-      }
 
-      // ★ 月末なら「選挙公示」
-      const next = day + 1;
-      const isMonthEnd = next > DAY_PER_MONTH;
-      if (isMonthEnd) {
-        // 公示状態へ
-        setElection(prev => announceElection(prev, month, year));
-
-        // タイムラインに「選挙が公示されました」を追加
-        setEvents((prev) => [
-          {
-            id: crypto.randomUUID(),
-            date: `Month ${month}, Year ${year}`,
-            category: 'system',
-            title: '選挙が公示されました（参加可能）',
-            description: '上部のバナー、またはこのカードから参加／投票へ移動できます。',
-            impact: 'neutral',
-          },
-          ...prev,
-        ]);
-
-        // カレンダー進行（翌月へ）
-        setDay(1);
-        setMonth((m) => {
-          const newMonth = m === 12 ? 1 : m + 1;
-          if (m === 12) setYear((y) => y + 1);
-          return newMonth;
-        });
-      } else {
-        // 月途中
-        setDay(next);
-      }
-
-      // 日替わりログ（任意）
-      setEvents((prev) => [
+        // 通常ニュース（高確率）
+        const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
+        if (Math.random() <= 0.9) {
+          setOpinion((o) => ({
+            conservative: clamp(o.conservative + (spec.effect.conservative ?? 0), 0, 100),
+            liberal:      clamp(o.liberal      + (spec.effect.liberal ?? 0),      0, 100),
+            apathetic:    clamp(o.apathetic    + (spec.effect.apathetic ?? 0),    0, 100),
+          }));
+          setEvents((prev) => [
             {
               id: crypto.randomUUID(),
-              date: isMonthEnd ? `Day 1 / Month ${month === 12 ? 1 : month + 1}` : `Day ${day + 1}`,
+              date: `Day ${day + 1}`,
+              category: 'news',
+              title: spec.title,
+              description: spec.desc,
+              impact: 'neutral',
+              delta: {
+                cons: spec.effect.conservative !== undefined ? Number((spec.effect.conservative).toFixed(1)) : undefined,
+                lib:  spec.effect.liberal      !== undefined ? Number((spec.effect.liberal).toFixed(1))      : undefined,
+                apa:  spec.effect.apathetic    !== undefined ? Number((spec.effect.apathetic).toFixed(1))    : undefined,
+              },
+            },
+            ...prev,
+          ]);
+        }
+
+        // ★ 月末なら「選挙公示」
+        const next = day + 1;
+        // const isMonthEnd = next > DAY_PER_MONTH;
+        const isMonthEnd = next > TUNING.dayPerMonth;
+        if (isMonthEnd) {
+          // 公示状態へ
+          setElection(prev => announceElection(prev, month, year));
+
+          // タイムラインに「選挙が公示されました」を追加
+          setEvents((prev) => [
+            {
+              id: crypto.randomUUID(),
+              date: `Month ${month}, Year ${year}`,
               category: 'system',
-              title: '新しい一日が始まりました',
-              description: '世論が日々の話題でわずかに揺れています。',
+              title: '選挙が公示されました（参加可能）',
+              description: '上部のバナー、またはこのカードから参加／投票へ移動できます。',
               impact: 'neutral',
             },
             ...prev,
-      ]);
+          ]);
+
+          // カレンダー進行（翌月へ）
+          setDay(1);
+          setMonth((m) => {
+            const newMonth = m === 12 ? 1 : m + 1;
+            if (m === 12) setYear((y) => y + 1);
+            return newMonth;
+          });
+        } else {
+          // 月途中
+          setDay(next);
+        }
+
+        // 日替わりログ（任意）
+        setEvents((prev) => [
+              {
+                id: crypto.randomUUID(),
+                date: isMonthEnd ? `Day 1 / Month ${month === 12 ? 1 : month + 1}` : `Day ${day + 1}`,
+                category: 'system',
+                title: '新しい一日が始まりました',
+                description: '世論が日々の話題でわずかに揺れています。',
+                impact: 'neutral',
+              },
+              ...prev,
+        ]);
+
+        // 人生イベント（10%）— 先に状態反映→次にカード追加
+        if (!isGameOver && !isCleared) {
+        //   if (Math.random() <= 0.10) { //本番用
+          if (Math.random() <= TUNING.lifeEventProb) { //開発用
+            const res = rollLifeEvent(status, opinion);
+            setStatus(s => ({ ...s, ...res.status }));
+            setOpinion(o => ({
+              conservative: clamp((res.opinion.conservative ?? o.conservative), 0, 100),
+              liberal:      clamp((res.opinion.liberal      ?? o.liberal),      0, 100),
+              apathetic:    clamp((res.opinion.apathetic    ?? o.apathetic),    0, 100),
+            }));
+            setEvents(prev => [
+              {
+                id: crypto.randomUUID(),
+                date: `Day ${day + 1}`,         // 翌日に起こった体で
+                category: 'system',
+                title: res.title,
+                description: res.desc,
+                impact: res.impact,
+                delta: res.delta,
+              },
+              ...prev,
+            ]);
+          }
+      
+          // クリア/ゲームオーバー判定
+          const flags = checkGameState(
+            { isGameOver, isCleared: isCleared },
+            status,
+            opinion,
+            followers
+          );
+          if (flags.isGameOver && !isGameOver) {
+            setIsGameOver(true);
+            setEvents(prev => [
+              { id: crypto.randomUUID(), date: `Day ${day + 1}`, category:'system',
+                title: 'ゲームオーバー', description: '条件を満たせず活動終了…。', impact:'bad' },
+              ...prev,
+            ]);
+          } else if (flags.isCleared && !isCleared) {
+            setIsCleared(true);
+            setEvents(prev => [
+              { id: crypto.randomUUID(), date: `Day ${day + 1}`, category:'system',
+                title: 'ゲームクリア！', description: '市議選への挑戦条件を満たしました。', impact:'good' },
+              ...prev,
+            ]);
+          }
+        }
 
       // APリセット
-      setAp(3);
+      setAp(TUNING.apPerDay);
     };
 
         // 選挙ハンドラ
@@ -269,6 +331,14 @@ export default function Timeline() {
             });
             if (next.lastResult) {
                 const { won, turnout, voteShare } = next.lastResult;
+                
+                // 反動（小さく）
+                setOpinion(o => ({
+                  conservative: clamp(o.conservative + (won ? +1 : -1), 0, 100),
+                  liberal:      clamp(o.liberal      + (won ? +1 : -1), 0, 100),
+                  apathetic:    clamp(o.apathetic    + (won ? -2 : +2), 0, 100),
+                }));
+            
                 setEvents(prevEvents => [
                   {
                     id: crypto.randomUUID(),
@@ -277,21 +347,37 @@ export default function Timeline() {
                     title: `選挙結果：${won ? '当選' : '惜敗'}`,
                     description: `投票率 ${turnout}% / 得票率 ${voteShare}%`,
                     impact: won ? 'good' : 'bad',
+                    delta: { cons: won ? +1 : -1, lib: won ? +1 : -1, apa: won ? -2 : +2 }, // バッジ表示用
                   },
                   ...prevEvents,
                 ]);
+
             }
             return next;
         });
     };
-  // NEWS
-  const NEWS_POOL: NewsSpec[] = [
-    { title: '経済指標が改善',   desc: '市況がやや持ち直しムード。', effect: { conservative: +0.5, liberal: +0.5, apathetic: -0.5 } },
-    { title: '物価高の懸念強まる', desc: '生活実感と政府評価にギャップ。', effect: { conservative: -0.5, liberal: +0.5, apathetic: +0.5 } },
-    { title: '災害対応が迅速',     desc: '政府への信頼がわずかに上向く。', effect: { conservative: +0.8, liberal: +0.3, apathetic: -0.6 } },
-    { title: '外交会談が難航',     desc: '国際関係の先行きに不安。',     effect: { conservative: -0.6, liberal: -0.6, apathetic: +0.6 } },
-  ];
-    function maybePushNews(prob = 0.3) {
+
+    // リセット関数
+    function resetAll() {
+      setEvents(initialEvents);
+      setFriends(makeInitialFriends());
+      setFollowers(randRange(80, 150));
+      setStatus({ comm: 50, credibility: 50, energy: 80 });
+      setOpinion({ conservative: 70, liberal: 70, apathetic: 60 });
+      setFilter('all');
+      setDay(1); setMonth(1); setYear(1);
+      setAp(3);
+      setElection(initialElectionState());
+      setIsGameOver(false); setIsCleared(false);
+    }
+    // NEWS
+    const NEWS_POOL: NewsSpec[] = [
+      { title: '経済指標が改善',   desc: '市況がやや持ち直しムード。', effect: { conservative: +0.5, liberal: +0.5, apathetic: -0.5 } },
+      { title: '物価高の懸念強まる', desc: '生活実感と政府評価にギャップ。', effect: { conservative: -0.5, liberal: +0.5, apathetic: +0.5 } },
+      { title: '災害対応が迅速',     desc: '政府への信頼がわずかに上向く。', effect: { conservative: +0.8, liberal: +0.3, apathetic: -0.6 } },
+      { title: '外交会談が難航',     desc: '国際関係の先行きに不安。',     effect: { conservative: -0.6, liberal: -0.6, apathetic: +0.6 } },
+    ];
+    function maybePushNews(prob = TUNING.newsDailyProb) {
       if (Math.random() > prob) return;
     
       const spec = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
@@ -321,7 +407,7 @@ export default function Timeline() {
       ]);
     }
     const addActionEvent = (type: 'vote' | 'talk' | 'post') => {
-    const date = `Day ${Math.ceil((events.length + 1) / 2)}`;
+    const date = `Day ${day}`;
     if (type === 'vote') {
       const deltaApa = -3;
       // ステータス/世論の変化
@@ -387,7 +473,8 @@ export default function Timeline() {
       maybePushNews(); // 行動後に 30% でニュース発生
       setAp((x) => Math.max(0, x - 1)); //AP消費
     } else {
-      const bad = Math.random() < 0.15;
+    //   const bad = Math.random() < 0.15;
+      const bad = Math.random() < TUNING.rageRate.normal;
 
       // フォロワー増減（-5〜-30 / +10〜+40）
       const deltaFollowers = bad
@@ -396,7 +483,8 @@ export default function Timeline() {
       setFollowers(n => Math.max(0, n + deltaFollowers));
 
       // 影響倍率（1.0 + followers * 0.0005, 上限2.5）
-      const influenceMul = Math.min(2.5, 1.0 + (followers * 0.0005));
+    //   const influenceMul = Math.min(2.5, 1.0 + (followers * 0.0005));
+      const influenceMul = Math.min(TUNING.snsInfluenceCap, 1.0 + followers * TUNING.snsInfluenceCoeff);
 
       // 世論へ反映（倍率込）
       setOpinion((o) => ({
@@ -433,6 +521,51 @@ export default function Timeline() {
     }
   };
 
+    // ▼ 1) セーブ用の型とキー
+    type SaveState = {
+      events: TimelineEvent[];
+      friends: Friend[];
+      followers: number;
+      status: PlayerStatus;
+      opinion: PublicOpinion;
+      filter: Filter;
+      day: number; month: number; year: number;
+      ap: number;
+      election: ElectionState;
+      isGameOver: boolean; isCleared: boolean;
+    };
+    const SAVE_KEY = 'politics-sim-save-v1';
+
+    // ▼ 2) セーブ/ロード関数
+    function saveGame() {
+      const data: SaveState = {
+        events, friends, followers, status, opinion, filter,
+        day, month, year, ap, election, isGameOver, isCleared
+      };
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
+    }
+
+    function loadGame() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return;
+        const d = JSON.parse(raw) as SaveState;
+        setEvents(d.events); setFriends(d.friends); setFollowers(d.followers);
+        setStatus(d.status); setOpinion(d.opinion); setFilter(d.filter);
+        setDay(d.day); setMonth(d.month); setYear(d.year); setAp(d.ap);
+        setElection(d.election); setIsGameOver(d.isGameOver); setIsCleared(d.isCleared);
+      } catch {}
+    }
+
+    // ▼ 3) 自動セーブ（主要stateが変わるたび）
+    React.useEffect(() => {
+      saveGame();
+    }, [events, status, opinion, followers, day, month, year, ap, election, isGameOver, isCleared]);
+
+    // ▼ 4) 初回ロード
+    React.useEffect(() => {
+      loadGame();
+    }, []);
 
   return (
     <div className="tl-container">
@@ -466,6 +599,27 @@ export default function Timeline() {
           onLeave={handleElectionLeave}
           onOpenVoting={handleElectionVote}
         />
+        
+        <FinishBanner
+          cleared={isCleared}
+          over={isGameOver}
+          onReset={resetAll}
+        />
+
+        <div className="tl-help">
+          <ol>
+            <li>1日あたり AP=3。行動ボタンで世論/ステータスが動きます。</li>
+            <li>月末に選挙が公示。バナーやカードから参加→投票できます。</li>
+            <li>クリア：信頼80・コミュ70・フォロワー1000・無関心40以下。</li>
+          </ol>
+        </div>
+
+        <div className="tl-savebar">
+          <button onClick={saveGame}>セーブ</button>
+          <button onClick={loadGame}>ロード</button>
+          <button onClick={resetAll}>新規開始</button>
+        </div>
+
       {/* ヘッダー / フィルター */}
       <div className="tl-header">
         <h2 className="tl-title">タイムライン</h2>
@@ -569,14 +723,13 @@ export default function Timeline() {
 
         {/* 50〜53: 行動ボタン（仮） */}
         <div className="tl-actions">
-          <button onClick={() => addActionEvent('vote')}>投票に行く</button>
-          <button onClick={() => addActionEvent('talk')}>友達と話す</button>
-          <button onClick={() => addActionEvent('post')}>SNSに投稿</button>
+            <button onClick={() => addActionEvent('vote')} disabled={ap<=0 || isGameOver || isCleared}>投票に行く</button>
+            <button onClick={() => addActionEvent('talk')} disabled={ap<=0 || isGameOver || isCleared}>友達と話す</button>
+            <button onClick={() => addActionEvent('post')} disabled={ap<=0 || isGameOver || isCleared}>SNSに投稿</button>
         </div>
-
-        <button className="tl-nextday" onClick={nextDay} disabled={ap>0}>
-          次の日へ（Day {day + 1}）
-        </button>
+         <button className="tl-nextday" onClick={nextDay} disabled={ap>0 || isGameOver || isCleared}>
+           次の日へ（Day {day + 1}）
+         </button>
 
     </div>
   );

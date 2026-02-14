@@ -267,3 +267,32 @@
 }
 .tl-electionbar-actions button:hover { background: #fed7aa; }
 .tl-item.tl-election { border-color: #fdba74; }
+
+/* クリア/オーバーバナー */
+.tl-finishbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 10px; border-radius: 10px; margin: 6px 0;
+}
+.tl-finishbar.tl-clear { background: #ecfdf5; border: 1px solid #a7f3d0; }
+.tl-finishbar.tl-over  { background: #fef2f2; border: 1px solid #fecaca; }
+.tl-finishbar button {
+  margin-left: auto; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer;
+}
+.tl-finishbar button:hover { background: #f1f5f9; }
+
+/* セーブ　*/
+.tl-savebar {
+  display: flex; gap: 8px; padding: 6px 0;
+}
+.tl-savebar button {
+  padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; cursor: pointer;
+}
+.tl-savebar button:hover { background: #f1f5f9; }
+
+/* お助け　*/
+.tl-help {
+  background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+  padding:8px 10px; margin:6px 0; font-size:12px; color:#334155;
+}
+.tl-help ol { margin:0; padding-left:18px; }

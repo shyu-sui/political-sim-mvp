@@ -16,12 +16,18 @@
   max-width: 100%;
   box-sizing: border-box; /* ← padding/border を幅に含める */
 
+  /* ★ ここで全体を「上寄せ」に */
+  align-content: start;   /* グリッド内の余白配分を上側へ */
+  justify-content: stretch;
+
 }
 
 .tl-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  align-self: start;
+  margin-top: 0;
 }
 
 .tl-title {
@@ -42,6 +48,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
+  align-content: flex-start;
+  justify-content: flex-start;
 }
 
 /* 個々のカード */
@@ -139,7 +148,19 @@
 }
 .tl-stat { display: flex; gap: 6px; align-items: baseline; }
 .tl-stat span { color: #64748b; font-size: 12px; }
-.tl-stat strong { font-size: 16px; }
+.tl-stat strong {
+  font-size: 16px;
+
+  font-variant-numeric: tabular-nums;  /* 等幅数字（対応ブラウザなら有効） */
+  font-feature-settings: 'tnum';
+  display: inline-block;
+  width: 3ch;                          /* 0〜100 を3桁ぶん確保（必要なら 4ch） */
+  text-align: right;
+  white-space: nowrap;                 /* 改行させない */
+  overflow: hidden;                    /* はみ出し防止 */
+  text-overflow: ellipsis;             /* まれに長い場合の保険 */
+
+}
 .tl-divider { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
 
 
@@ -147,6 +168,9 @@
 .tl-container,
 .tl-item,
 .tl-statusbar {
+  /* overflow-x: hidden; */
+  flex-wrap: wrap;         /* 画面が極端に狭い時は折り返して保護 */
+  gap: 12px;
   color: #0f172a; /* テキストを濃いグレーに */
 }
 

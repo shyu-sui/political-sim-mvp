@@ -290,9 +290,52 @@
 }
 .tl-savebar button:hover { background: #f1f5f9; }
 
+/* プレイヤー名チップ */
+.tl-playername {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.tl-playername strong {
+  max-width: 8ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0f172a;
+}
+
 /* お助け　*/
 .tl-help {
   background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
   padding:8px 10px; margin:6px 0; font-size:12px; color:#334155;
 }
 .tl-help ol { margin:0; padding-left:18px; }
+
+/* 2行目ステータスバー（支持率・信念スコア）*/
+.tl-statusbar2 {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tl-approval strong {
+  font-size: 18px !important;
+  font-weight: 800 !important;
+}
+.tl-belief-axis span { font-size: 11px !important; }
+.tl-belief-axis strong { font-size: 13px !important; width: 2.5ch !important; }
+
+/* 討論ボタン */
+.tl-btn-debate {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+  font-weight: 700;
+}
+.tl-btn-debate:hover:not(:disabled) {
+  background: #1e293b !important;
+}
+.tl-btn-debate:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

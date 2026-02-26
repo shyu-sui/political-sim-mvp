@@ -1,6 +1,6 @@
 .ic-overlay {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   min-height: 100dvh;
   padding: 16px;

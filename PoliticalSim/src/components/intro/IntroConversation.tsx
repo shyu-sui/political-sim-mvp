@@ -145,6 +145,11 @@ const STEPS: Record<string, Step> = {
       prompt: '政治への関心',
       choices: [
         {
+          label: 'はじめから興味津々だよ',
+          apply: b => ({ ...b, consistency: clamp(b.consistency + 10) }),
+          next: 's8c',
+        },
+        {
           label: 'ちょっと興味出てきた',
           apply: b => ({ ...b, consistency: clamp(b.consistency + 5) }),
           next: 's8a',
@@ -156,6 +161,14 @@ const STEPS: Record<string, Step> = {
         },
       ],
     },
+  },
+  s8c: {
+    kind: 'dialogue',
+    lines: [
+      { id: 'l8c1', speaker: 'friend', name: '山田', text: 'えっ、そうなの！？じゃあ一緒に動こうよ。あなたみたいな人が政治に関わってくれると心強い！' },
+      { id: 'l8c2', speaker: 'system', text: '強い信念と高い一貫性でゲームスタート。あなたの行動が世界を動かします。' },
+    ],
+    next: 'end',
   },
   s8a: {
     kind: 'dialogue',

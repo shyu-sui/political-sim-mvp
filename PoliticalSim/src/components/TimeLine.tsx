@@ -347,6 +347,11 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   // 選挙ハンドラ
   const handleElectionJoin  = () => setElection(prev => joinElection(prev));
   const handleElectionLeave = () => setElection(prev => leaveElection(prev));
+  // Phase 2: 市議選へ立候補する（新規選挙を公示 + 参加を同時に実行）
+  const handleGoToCityElection = () => {
+    const announced = announceElection(initialElectionState(), month, year);
+    setElection(joinElection(announced));
+  };
 
   // 投票ボタン：結果を計算してアニメーションを表示
   const handleElectionVote = () => {
@@ -372,7 +377,6 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const handleVotingAnimClose = () => {
     if (!pendingVote) return;
     const { won, turnout, playerShare, type } = pendingVote;
-    setElection(pendingVote.finalState);
     setOpinion(o => ({
       conservative: clamp(o.conservative + (won ? +1 : -1), 0, 100),
       liberal:      clamp(o.liberal      + (won ? +1 : -1), 0, 100),
@@ -388,9 +392,16 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       delta: { cons: won ? +1 : -1, lib: won ? +1 : -1, apa: won ? -2 : +2 },
     }, ...prev]);
 
-    if (won && type === 'city') {
-      setIsCouncilor(true);
-      setCouncilTurn(0);
+    if (type === 'city') {
+      if (won) {
+        setIsCouncilor(true);
+        setCouncilTurn(0);
+      }
+      // 当選・落選どちらでも選挙状態をリセット（落選時は FinishBanner から再挑戦できる）
+      setElection(initialElectionState());
+    } else {
+      // 衆院選は結果をバナーに残す
+      setElection(pendingVote.finalState);
     }
     setPendingVote(null);
   };
@@ -838,17 +849,17 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       </div>
 
       <FinishBanner
-        cleared={isCleared}
+        cleared={isCleared && !isCouncilor && election.phase === 'idle'}
         over={isGameOver}
-        stage={isCouncilor ? 'cityCouncil' : 'citizen'}
+        stage={'citizen'}
         onReset={resetAll}
-        onNextStage={handleElectionJoin}
+        onNextStage={handleGoToCityElection}
       />
 
       <div className="tl-goal">
         <span className="tl-goal-label">🎯 目標</span>
         <span className="tl-goal-text">
-          {election.lastResult?.won
+          {isCouncilor
             ? `市議会議員として成績を残し、国会議員になろう（衆議院議員選挙日まであと${Math.max(0, 49 - ((year - 1) * 12 + month))}カ月）`
             : isCleared
               ? `選挙で選ばれるように頑張ろう（選挙日まであと${TUNING.dayPerMonth - day}日）`
@@ -995,7 +1006,7 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
           次の期へ（4ヶ月） — 残り {12 - councilTurn} 期
         </button>
       ) : (
-        <button className="tl-nextday" onClick={nextDay} disabled={ap > 0 || isGameOver || isCleared}>
+        <button className="tl-nextday" onClick={nextDay} disabled={ap > 0 || isGameOver}>
           次の日へ（Day {day + 1}）
         </button>
       )}

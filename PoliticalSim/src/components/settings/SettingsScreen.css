@@ -1,0 +1,120 @@
+.ss-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: 16px;
+  background: #e2e8f0;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ss-panel {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* ヘッダー */
+.ss-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ss-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.ss-back {
+  font-size: 13px;
+  color: #64748b;
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ss-back:hover { background: #f1f5f9; }
+
+/* 項目リスト */
+.ss-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ss-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  gap: 12px;
+}
+
+.ss-item-danger {
+  background: #fff5f5;
+  border-color: #fecaca;
+}
+
+.ss-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ss-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ss-item-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* ボタン */
+.ss-btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s;
+}
+
+.ss-btn-save {
+  background: #3b82f6;
+  color: #fff;
+}
+.ss-btn-save:hover { background: #2563eb; }
+
+.ss-btn-load {
+  background: #059669;
+  color: #fff;
+}
+.ss-btn-load:hover { background: #047857; }
+
+.ss-btn-reset {
+  background: #ef4444;
+  color: #fff;
+}
+.ss-btn-reset:hover { background: #dc2626; }

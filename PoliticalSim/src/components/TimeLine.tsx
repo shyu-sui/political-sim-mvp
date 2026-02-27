@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './timeline.css';
 import { FiZap, FiUsers, FiTwitter, FiGlobe, FiBell } from 'react-icons/fi';
 
@@ -16,6 +16,7 @@ import { rollLifeEvent } from './life/lifeEventsLogic';
 
 import { checkGameState } from './finish/gameState';
 import FinishBanner from './finish/FinishBanner';
+import SettingsScreen from './settings/SettingsScreen';
 
 import type { CharType } from './start/StartScreen';
 
@@ -153,7 +154,7 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const [isGameOver, setIsGameOver] = useState(false);
   const [isCleared,  setIsCleared]  = useState(false);
 
-  const fmt0 = (n: number) => Math.round(n).toString();
+  const fmt0 = (n: number) => Math.floor(n).toString();
 
   // ---------- スキャンダル結果ハンドラ ----------
   function handleScandalClose(choice: ScandalChoice) {
@@ -516,11 +517,33 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     }
   }, []);
 
+  // ---------- 設定モーダル ----------
+  const [showSettings, setShowSettings] = useState(false);
+
   // ---------- 信念スコア表示用ヘルパ ----------
   const beliefAxes: [string, keyof BeliefScore][] = [
     ['経済', 'economy'], ['福祉', 'welfare'], ['安保', 'security'],
     ['環境', 'environment'], ['外交', 'foreign'],
   ];
+
+  // ---------- 選挙バナー自動スクロール ----------
+  const electionBannerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (election.phase === 'announced' && electionBannerRef.current) {
+      electionBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [election.phase]);
+
+  if (showSettings) {
+    return (
+      <SettingsScreen
+        onSave={() => { saveGame(); setShowSettings(false); }}
+        onLoad={() => { loadGame(); setShowSettings(false); }}
+        onReset={resetAll}
+        onBack={() => setShowSettings(false)}
+      />
+    );
+  }
 
   return (
     <div className="tl-container">
@@ -578,12 +601,14 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         ))}
       </div>
 
-      <ElectionBanner
-        state={election}
-        onJoin={handleElectionJoin}
-        onLeave={handleElectionLeave}
-        onOpenVoting={handleElectionVote}
-      />
+      <div ref={electionBannerRef}>
+        <ElectionBanner
+          state={election}
+          onJoin={handleElectionJoin}
+          onLeave={handleElectionLeave}
+          onOpenVoting={handleElectionVote}
+        />
+      </div>
 
       <FinishBanner
         cleared={isCleared}
@@ -591,18 +616,20 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         onReset={resetAll}
       />
 
-      <div className="tl-help">
-        <ol>
-          <li>1日あたり AP=3。行動ボタンで世論/ステータスが動きます。</li>
-          <li>討論バトルは AP=2 消費。一貫性スコアに注意。</li>
-          <li>Day 3 にスキャンダルが発生します。慎重に対応を。</li>
-        </ol>
+      <div className="tl-goal">
+        <span className="tl-goal-label">🎯 目標</span>
+        <span className="tl-goal-text">
+          {election.lastResult?.won
+            ? `市議会議員として成績を残し、国会議員になろう（衆議院議員選挙日まであと${Math.max(0, 49 - ((year - 1) * 12 + month))}カ月）`
+            : isCleared
+              ? `選挙で選ばれるように頑張ろう（選挙日まであと${TUNING.dayPerMonth - day}日）`
+              : `立候補できるように頑張ろう（公示日まであと${TUNING.dayPerMonth - day}日）`
+          }
+        </span>
       </div>
 
-      <div className="tl-savebar">
-        <button onClick={saveGame}>セーブ</button>
-        <button onClick={loadGame}>ロード</button>
-        <button onClick={resetAll}>新規開始</button>
+      <div className="tl-settingsbar">
+        <button className="tl-btn-settings" onClick={() => setShowSettings(true)}>⚙️ 設定</button>
       </div>
 
       <div className="tl-header">

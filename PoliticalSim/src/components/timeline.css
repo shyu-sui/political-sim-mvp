@@ -281,14 +281,15 @@
 }
 .tl-finishbar button:hover { background: #f1f5f9; }
 
-/* セーブ　*/
-.tl-savebar {
-  display: flex; gap: 8px; padding: 6px 0;
+/* 設定ボタン */
+.tl-settingsbar {
+  display: flex; padding: 4px 0;
 }
-.tl-savebar button {
-  padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; cursor: pointer;
+.tl-btn-settings {
+  padding: 5px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
+  background: #f8fafc; font-size: 13px; cursor: pointer;
 }
-.tl-savebar button:hover { background: #f1f5f9; }
+.tl-btn-settings:hover { background: #f1f5f9; }
 
 /* プレイヤー名チップ */
 .tl-playername {
@@ -306,12 +307,14 @@
   color: #0f172a;
 }
 
-/* お助け　*/
-.tl-help {
-  background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
-  padding:8px 10px; margin:6px 0; font-size:12px; color:#334155;
+/* 目標 */
+.tl-goal {
+  display:flex; align-items:center; gap:8px;
+  background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;
+  padding:8px 12px; margin:6px 0; font-size:13px; color:#1e40af;
 }
-.tl-help ol { margin:0; padding-left:18px; }
+.tl-goal-label { font-weight:700; white-space:nowrap; }
+.tl-goal-text  { font-weight:500; }
 
 /* 2行目ステータスバー（支持率・信念スコア）*/
 .tl-statusbar2 {

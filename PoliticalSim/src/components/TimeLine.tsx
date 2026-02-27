@@ -11,6 +11,8 @@ import {
 } from './election/electionLogic.ts';
 import ElectionBanner from './election/ElectionBanner.tsx';
 import ElectionCard from './election/ElectionCard';
+import VotingAnimation from './election/VotingAnimation';
+import CouncilEndModal from './council/CouncilEndModal';
 
 import { rollLifeEvent } from './life/lifeEventsLogic';
 
@@ -26,7 +28,7 @@ import {
   type BeliefScore, type ScandalState, type ScandalChoice, type DebateState,
 } from '../types/gameTypes';
 import DebateBattle, { createDebateState } from './battle/DebateBattle';
-import ScandalEvent from './scandal/ScandalEvent';
+import ScandalEvent, { createSecretaryScandal } from './scandal/ScandalEvent';
 
 export type EventCategory = 'news' | 'sns' | 'friend' | 'action' | 'system';
 export type Impact = 'good' | 'bad' | 'neutral';
@@ -137,6 +139,25 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const [activeDebate,  setActiveDebate]  = useState<DebateState | null>(null);
   const [scandalTriggered, setScandalTriggered] = useState(false);
 
+  // ---- 市議挑戦フェーズ: 街頭演説+討論の累計回数・SNSサブメニュー ----
+  const [speechDebateCount, setSpeechDebateCount] = useState(0);
+  const [showSnsMenu, setShowSnsMenu] = useState(false);
+
+  // ---- 市議当選後フェーズ ----
+  const [isCouncilor, setIsCouncilor]             = useState(false);
+  const [councilTurn, setCouncilTurn]             = useState(0);
+  const [showCouncilEndModal, setShowCouncilEndModal] = useState(false);
+
+  // ---- 投票アニメーション ----
+  type PendingVote = {
+    playerShare: number; rivalShare: number;
+    turnout: number; won: boolean;
+    finalState: ElectionState;
+    type: 'city' | 'house';
+    rivalName: string;
+  };
+  const [pendingVote, setPendingVote] = useState<PendingVote | null>(null);
+
   const filtered = useMemo(
     () => (filter === 'all' ? events : events.filter(e => e.category === filter)),
     [events, filter]
@@ -207,9 +228,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     setAp(x => Math.max(0, x - 2)); // 討論は AP 2 消費
   }
 
-  // ---------- 討論開始 ----------
+  // ---------- 討論開始（市議挑戦フェーズ以降のみ解放） ----------
   function startDebate() {
-    if (ap < 2 || isGameOver || isCleared) return;
+    if (ap < 2 || isGameOver || !isCleared) return;
     const debate = createDebateState({
       opponentName:  '田中 保一',
       opponentParty: '守旧派連合',
@@ -217,6 +238,7 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       opponentHP:    80,
     });
     setActiveDebate(debate);
+    setSpeechDebateCount(c => c + 1);
     setEvents(prev => [{
       id: crypto.randomUUID(), date: `Day ${day}`, category: 'action',
       title: '討論バトルに参加した', description: '田中 保一 と経済政策について激論を交わしています。',
@@ -280,6 +302,14 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       description: '世論が日々の話題でわずかに揺れています。', impact: 'neutral',
     }, ...prev]);
 
+    // 市議挑戦フェーズ: 一貫性が低いほどスキャンダルが発生しやすい
+    if (isCleared && !isGameOver && !activeScandal.active) {
+      const scandalProb = (100 - beliefScore.consistency) / 400; // 最大25%/日
+      if (Math.random() < scandalProb) {
+        setActiveScandal(createSecretaryScandal());
+      }
+    }
+
     if (!isGameOver && !isCleared) {
       if (Math.random() <= TUNING.lifeEventProb) {
         const res = rollLifeEvent(status, opinion);
@@ -317,35 +347,129 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   // 選挙ハンドラ
   const handleElectionJoin  = () => setElection(prev => joinElection(prev));
   const handleElectionLeave = () => setElection(prev => leaveElection(prev));
-  const handleElectionVote  = () => {
-    setElection(prev => openVoting(prev));
-    setElection(prev => {
-      const next = computeResult(prev, {
-        conservative: opinion.conservative,
-        liberal: opinion.liberal,
-        apathetic: opinion.apathetic,
-        credibility: status.credibility,
-        comm: status.comm,
-        followers,
-      });
-      if (next.lastResult) {
-        const { won, turnout, voteShare } = next.lastResult;
-        setOpinion(o => ({
-          conservative: clamp(o.conservative + (won ? +1 : -1), 0, 100),
-          liberal:      clamp(o.liberal      + (won ? +1 : -1), 0, 100),
-          apathetic:    clamp(o.apathetic    + (won ? -2 : +2), 0, 100),
-        }));
-        setEvents(prev => [{
-          id: crypto.randomUUID(), date: `Month ${month}, Year ${year}`, category: 'system',
-          title: `選挙結果：${won ? '当選' : '惜敗'}`,
-          description: `投票率 ${turnout}% / 得票率 ${voteShare}%`,
-          impact: won ? 'good' : 'bad',
-          delta: { cons: won ? +1 : -1, lib: won ? +1 : -1, apa: won ? -2 : +2 },
-        }, ...prev]);
-      }
-      return next;
+
+  // 投票ボタン：結果を計算してアニメーションを表示
+  const handleElectionVote = () => {
+    const withVoting = openVoting(election);
+    const finalState = computeResult(withVoting, {
+      conservative: opinion.conservative,
+      liberal:      opinion.liberal,
+      apathetic:    opinion.apathetic,
+      credibility:  status.credibility,
+      comm:         status.comm,
+      followers,
+      consistency:  beliefScore.consistency,
+    });
+    if (!finalState.lastResult) return;
+    const { voteShare, rivalShare, turnout, won } = finalState.lastResult;
+    setPendingVote({
+      playerShare: voteShare, rivalShare, turnout, won, finalState,
+      type: 'city', rivalName: '田中 保一',
     });
   };
+
+  // アニメーション終了後に結果を反映
+  const handleVotingAnimClose = () => {
+    if (!pendingVote) return;
+    const { won, turnout, playerShare, type } = pendingVote;
+    setElection(pendingVote.finalState);
+    setOpinion(o => ({
+      conservative: clamp(o.conservative + (won ? +1 : -1), 0, 100),
+      liberal:      clamp(o.liberal      + (won ? +1 : -1), 0, 100),
+      apathetic:    clamp(o.apathetic    + (won ? -2 : +2), 0, 100),
+    }));
+
+    const electionLabel = type === 'house' ? '衆議院議員選挙' : '市議会議員選挙';
+    setEvents(prev => [{
+      id: crypto.randomUUID(), date: `Month ${month}, Year ${year}`, category: 'system',
+      title: `${electionLabel}結果：${won ? '当選！' : '惜敗…'}`,
+      description: `投票率 ${turnout}% / 得票率 ${playerShare}%`,
+      impact: won ? 'good' : 'bad',
+      delta: { cons: won ? +1 : -1, lib: won ? +1 : -1, apa: won ? -2 : +2 },
+    }, ...prev]);
+
+    if (won && type === 'city') {
+      setIsCouncilor(true);
+      setCouncilTurn(0);
+    }
+    setPendingVote(null);
+  };
+
+  // ---------- Phase3: 市議会 次の期へ（4ヶ月進行）----------
+  function nextCouncilPeriod() {
+    if (ap > 0 || isGameOver) return;
+
+    const newTurn = councilTurn + 1;
+    // 4ヶ月進める
+    let newMonth = month + 4;
+    let addYears = 0;
+    while (newMonth > 12) { newMonth -= 12; addYears++; }
+    setMonth(newMonth);
+    if (addYears > 0) setYear(y => y + addYears);
+
+    // 世論の自然変動
+    setOpinion(o => ({
+      conservative: clamp(o.conservative + (Math.random() * 6 - 3), 0, 100),
+      liberal:      clamp(o.liberal      + (Math.random() * 6 - 3), 0, 100),
+      apathetic:    clamp(o.apathetic    + (Math.random() * 4 - 2), 0, 100),
+    }));
+
+    setCouncilTurn(newTurn);
+    const remaining = 12 - newTurn;
+    setEvents(prev => [{
+      id: crypto.randomUUID(),
+      date: `Y${year + addYears}-M${newMonth}`,
+      category: 'system',
+      title: `市議会 第${newTurn}期（4ヶ月）が経過`,
+      description: remaining > 0
+        ? `残り ${remaining} 期（${remaining * 4} ヶ月）`
+        : '4年間の市議会議員任期が終了しました。次のステップへ。',
+      impact: 'neutral',
+    }, ...prev]);
+
+    if (newTurn >= 12) {
+      setShowCouncilEndModal(true);
+    }
+    setAp(TUNING.apPerDay);
+  }
+
+  // ---------- 市議会終了：再挑戦 or 衆議院 ----------
+  function handleReCityCouncil() {
+    setIsCouncilor(false);
+    setCouncilTurn(0);
+    setShowCouncilEndModal(false);
+    // 選挙を即公示状態にして再挑戦できるようにする
+    setElection({ ...initialElectionState(), phase: 'announced', month, year });
+    setEvents(prev => [{
+      id: crypto.randomUUID(), date: `Y${year}-M${month}`, category: 'system',
+      title: '市議選再挑戦を決意',
+      description: '再び市議会議員選挙に立候補することを決めました。',
+      impact: 'good',
+    }, ...prev]);
+  }
+
+  function handleHouseElection() {
+    setShowCouncilEndModal(false);
+    // 衆議院選挙（threshold 55% で難易度高め）
+    const withVoting = openVoting({ ...initialElectionState(), phase: 'voting', month, year });
+    const finalState = computeResult(withVoting, {
+      conservative: opinion.conservative,
+      liberal:      opinion.liberal,
+      apathetic:    opinion.apathetic,
+      credibility:  status.credibility,
+      comm:         status.comm,
+      followers,
+      consistency:  beliefScore.consistency,
+    }, 55); // 衆議院は55%が当選ライン
+    if (!finalState.lastResult) return;
+    const { voteShare, rivalShare, turnout, won } = finalState.lastResult;
+    setPendingVote({
+      playerShare: voteShare, rivalShare, turnout, won,
+      finalState,
+      type: 'house',
+      rivalName: '山田 太郎（現職議員）',
+    });
+  }
 
   function resetAll() {
     localStorage.removeItem(SAVE_KEY);
@@ -379,17 +503,38 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     }, ...prev]);
   }
 
-  const addActionEvent = (type: 'speech' | 'talk' | 'post') => {
+  const addActionEvent = (type: 'speech' | 'talk' | 'post' | 'policy') => {
     const date = `Day ${day}`;
     if (type === 'speech') {
-      const deltaApa = -4;
-      setStatus(s => ({ ...s, credibility: Math.min(100, s.credibility + 3), energy: Math.max(0, s.energy - 3) }));
+      const deltaApa   = isCouncilor ? -5 : -4;
+      const credDelta  = isCouncilor ?  5 :  3;
+      const consDelta  = isCouncilor ?  2 :  1;
+      setStatus(s => ({ ...s, credibility: Math.min(100, s.credibility + credDelta), energy: Math.max(0, s.energy - 4) }));
       setOpinion(o => ({ ...o, apathetic: Math.max(0, o.apathetic + deltaApa) }));
-      setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency + 1, 0, 100) }));
+      setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency + consDelta, 0, 100) }));
+      if (isCleared || isCouncilor) setSpeechDebateCount(c => c + 1);
       setEvents(prev => [{
         id: crypto.randomUUID(), date, category: 'action',
-        title: '街頭演説を聴いた',
-        description: '候補者の訴えに耳を傾け、政治への関心が高まった。',
+        title: isCouncilor ? '街頭演説をした' : isCleared ? '街頭演説を行った' : '街頭演説を聴いた',
+        description: isCouncilor
+          ? '市議として有権者に政策を訴えた。支持と一貫性が高まった。'
+          : isCleared
+            ? '有権者に直接訴えた。現場の声が一貫性と信頼を高める。'
+            : '候補者の訴えに耳を傾け、政治への関心が高まった。',
+        impact: 'good', delta: { apa: deltaApa },
+      }, ...prev]);
+      maybePushNews();
+      setAp(x => Math.max(0, x - 1));
+    } else if (type === 'policy') {
+      const deltaApa = -3;
+      setStatus(s => ({ ...s, credibility: Math.min(100, s.credibility + 4), energy: Math.max(0, s.energy - 6) }));
+      setOpinion(o => ({ ...o, apathetic: Math.max(0, o.apathetic + deltaApa) }));
+      setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency + 3, 0, 100) }));
+      setFollowers(n => n + randRange(20, 50));
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date, category: 'action',
+        title: '政策立案を行った',
+        description: '市民のための政策を練り上げた。信頼と一貫性が高まり、注目度も上昇。',
         impact: 'good', delta: { apa: deltaApa },
       }, ...prev]);
       maybePushNews();
@@ -456,6 +601,67 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     }
   };
 
+  // ---------- 市議挑戦フェーズ: SNS投稿（YouTube / X）----------
+  function addSnsPostAdvanced(platform: 'youtube' | 'x') {
+    setShowSnsMenu(false);
+    const date = `Day ${day}`;
+    const insufficient = speechDebateCount < 5;
+    const isYouTube = platform === 'youtube';
+
+    const rageRate  = isYouTube ? 0.10 : 0.20;
+    const bad       = Math.random() < rageRate;
+    const gainMin   = isYouTube ? 30 : 15;
+    const gainMax   = isYouTube ? 80 : 50;
+    const lossMin   = isYouTube ? 10 : 15;
+    const lossMax   = isYouTube ? 30 : 40;
+    const deltaFollowers = bad
+      ? -(lossMin + Math.floor(Math.random() * (lossMax - lossMin + 1)))
+      :  (gainMin + Math.floor(Math.random() * (gainMax - gainMin + 1)));
+
+    setFollowers(n => Math.max(0, n + deltaFollowers));
+
+    const credDelta = bad ? (isYouTube ? -3 : -5) : (insufficient ? 0 : (isYouTube ? 2 : 1));
+    setStatus(s => ({
+      ...s,
+      credibility: clamp(s.credibility + credDelta, 0, 100),
+      energy: Math.max(0, s.energy - (isYouTube ? 3 : 2)),
+    }));
+
+    if (insufficient && !bad) {
+      // 実績不足ペナルティ: 支持率（保守・リベラル低下）+ 一貫性低下
+      const opinionPenalty = isYouTube ? 3 : 5;
+      const consistencyPenalty = isYouTube ? 5 : 8;
+      setOpinion(o => ({
+        conservative: clamp(o.conservative - opinionPenalty, 0, 100),
+        liberal:      clamp(o.liberal      - opinionPenalty, 0, 100),
+        apathetic:    clamp(o.apathetic    + opinionPenalty, 0, 100),
+      }));
+      setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency - consistencyPenalty, 0, 100) }));
+    } else if (bad) {
+      setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency - 3, 0, 100) }));
+    }
+
+    const warningYT = '【忠告】街頭演説・討論の実績不足が動画の薄さとして露呈しました。支持率と一貫性が低下。まず現場経験を積んでから発信しましょう。';
+    const warningX  = '【忠告】街頭演説・討論の実績不足で発言の根拠が薄いと指摘されました。支持率と一貫性が低下。まず現場での活動実績を作りましょう。';
+
+    const description = bad
+      ? (isYouTube ? '動画が批判を受けフォロワーが減少しました。' : '投稿が炎上。フォロワーが大幅に減少し、信頼が低下しました。')
+      : insufficient
+        ? (isYouTube ? warningYT : warningX)
+        : (isYouTube ? '動画が好評でフォロワーと信頼が増加しました。' : '投稿が拡散されフォロワーが増加しました。');
+
+    setEvents(prev => [{
+      id: crypto.randomUUID(), date, category: 'sns',
+      title: isYouTube ? 'YouTubeに動画を投稿した' : 'Xに投稿した',
+      description,
+      impact: (bad || insufficient) ? 'bad' : 'good',
+      delta: { followers: deltaFollowers },
+    }, ...prev]);
+
+    maybePushNews();
+    setAp(x => Math.max(0, x - 1));
+  }
+
   // ---------- セーブ/ロード ----------
   type SaveState = {
     events: TimelineEvent[]; friends: Friend[]; followers: number;
@@ -464,14 +670,17 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     election: ElectionState; isGameOver: boolean; isCleared: boolean;
     playerName: string; charType: CharType;
     beliefScore: BeliefScore; scandalTriggered: boolean;
+    speechDebateCount: number;
+    isCouncilor: boolean; councilTurn: number;
   };
-  const SAVE_KEY = 'politics-sim-save-v3';
+  const SAVE_KEY = 'politics-sim-save-v5';
 
   function saveGame() {
     const data: SaveState = {
       events, friends, followers, status, opinion, filter,
       day, month, year, ap, election, isGameOver, isCleared,
       playerName, charType, beliefScore, scandalTriggered,
+      speechDebateCount, isCouncilor, councilTurn,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
   }
@@ -488,13 +697,17 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       if (d.playerName)  setPlayerName(d.playerName);
       if (d.charType)    setCharType(d.charType);
       if (d.beliefScore) setBeliefScore(d.beliefScore);
-      if (d.scandalTriggered !== undefined) setScandalTriggered(d.scandalTriggered);
+      if (d.scandalTriggered  !== undefined) setScandalTriggered(d.scandalTriggered);
+      if (d.speechDebateCount !== undefined) setSpeechDebateCount(d.speechDebateCount);
+      if (d.isCouncilor   !== undefined) setIsCouncilor(d.isCouncilor);
+      if (d.councilTurn   !== undefined) setCouncilTurn(d.councilTurn);
     } catch {}
   }
 
   React.useEffect(() => { saveGame(); }, [
     events, status, opinion, followers, day, month, year, ap,
     election, isGameOver, isCleared, beliefScore, scandalTriggered,
+    speechDebateCount, isCouncilor, councilTurn,
   ]);
 
   React.useEffect(() => {
@@ -540,6 +753,27 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
 
   return (
     <div className="tl-container">
+      {/* ---- 市議会任期終了モーダル ---- */}
+      {showCouncilEndModal && (
+        <CouncilEndModal
+          onReCityCouncil={handleReCityCouncil}
+          onHouseElection={handleHouseElection}
+        />
+      )}
+
+      {/* ---- 投票アニメーションモーダル ---- */}
+      {pendingVote && (
+        <VotingAnimation
+          playerName={playerName || 'あなた'}
+          playerShare={pendingVote.playerShare}
+          rivalName={pendingVote.rivalName}
+          rivalShare={pendingVote.rivalShare}
+          turnout={pendingVote.turnout}
+          won={pendingVote.won}
+          onClose={handleVotingAnimClose}
+        />
+      )}
+
       {/* ---- スキャンダルモーダル ---- */}
       {activeScandal.active && (
         <ScandalEvent state={activeScandal} onClose={handleScandalClose} />
@@ -710,20 +944,59 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       </div>
 
       <div className="tl-actions">
-        <button onClick={() => addActionEvent('speech')} disabled={ap <= 0 || isGameOver || isCleared}>街頭演説を聴く</button>
-        <button onClick={() => addActionEvent('talk')}   disabled={ap <= 0 || isGameOver || isCleared}>友達と話す</button>
-        <button onClick={() => addActionEvent('post')}   disabled={ap <= 0 || isGameOver || isCleared}>SNSに投稿</button>
-        <button
-          disabled
-          className="tl-btn-debate"
-          title="市議議員に当選後に解放されます"
-        >
-          ⚔️ 討論
-        </button>
+        {isCouncilor ? (
+          // Phase 3: 市議議員
+          <>
+            <button onClick={() => addActionEvent('speech')} disabled={ap <= 0 || isGameOver}>街頭演説をする</button>
+            <button onClick={() => addActionEvent('policy')} disabled={ap <= 0 || isGameOver}>政策立案</button>
+            <button onClick={() => setShowSnsMenu(m => !m)}  disabled={ap <= 0 || isGameOver}>SNSに投稿</button>
+            <button
+              onClick={startDebate}
+              disabled={ap < 2 || isGameOver}
+              className="tl-btn-debate"
+              title="AP2消費"
+            >⚔️ 討論</button>
+          </>
+        ) : (
+          // Phase 1/2: 一般市民 / 市議挑戦中 
+          <>
+            <button onClick={() => addActionEvent('speech')} disabled={ap <= 0 || isGameOver}>
+              {isCleared ? '街頭演説' : '街頭演説を聴く'}
+            </button>
+            <button onClick={() => addActionEvent('talk')} disabled={ap <= 0 || isGameOver}>友達と話す</button>
+            <button
+              onClick={() => isCleared ? setShowSnsMenu(m => !m) : addActionEvent('post')}
+              disabled={ap <= 0 || isGameOver}
+            >SNSに投稿</button>
+            <button
+              onClick={startDebate}
+              disabled={!isCleared || ap < 2 || isGameOver}
+              className="tl-btn-debate"
+              title={isCleared ? 'AP2消費' : '市議議員挑戦後に解放されます'}
+            >⚔️ 討論</button>
+          </>
+        )}
       </div>
-      <button className="tl-nextday" onClick={nextDay} disabled={ap > 0 || isGameOver || isCleared}>
-        次の日へ（Day {day + 1}）
-      </button>
+
+      {/* SNS プラットフォーム選択サブメニュー（Phase 2/3 共通） */}
+      {(isCleared || isCouncilor) && showSnsMenu && (
+        <div className="tl-sns-menu">
+          <button onClick={() => addSnsPostAdvanced('youtube')} disabled={ap <= 0}>📹 YouTubeに投稿</button>
+          <button onClick={() => addSnsPostAdvanced('x')}       disabled={ap <= 0}>𝕏 Xに投稿</button>
+          <button className="tl-sns-cancel" onClick={() => setShowSnsMenu(false)}>キャンセル</button>
+        </div>
+      )}
+
+      {/* Phase 3: 次の期へ（4ヶ月）*/}
+      {isCouncilor ? (
+        <button className="tl-nextperiod" onClick={nextCouncilPeriod} disabled={ap > 0 || isGameOver}>
+          次の期へ（4ヶ月） — 残り {12 - councilTurn} 期
+        </button>
+      ) : (
+        <button className="tl-nextday" onClick={nextDay} disabled={ap > 0 || isGameOver || isCleared}>
+          次の日へ（Day {day + 1}）
+        </button>
+      )}
     </div>
   );
 }

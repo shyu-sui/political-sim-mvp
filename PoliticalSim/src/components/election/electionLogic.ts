@@ -6,7 +6,7 @@ export type ElectionState = {
   participating: boolean;   // 参加フラグ（いつでも出入り）
   month: number;
   year: number;
-  lastResult?: { turnout: number; voteShare: number; won: boolean };
+  lastResult?: { turnout: number; voteShare: number; rivalShare: number; won: boolean };
 };
 
 export type Inputs = {
@@ -16,6 +16,7 @@ export type Inputs = {
   credibility: number;
   comm: number;
   followers: number;
+  consistency: number;  // 一貫性が低いと得票率にペナルティ
 };
 
 export const TUNING = {
@@ -43,13 +44,13 @@ export function openVoting(prev: ElectionState): ElectionState {
   return { ...prev, phase: 'voting' };
 }
 
-export function computeResult(prev: ElectionState, inp: Inputs) {
-  // 82 投票率 ≒ 100 - 無関心 + ノイズ
+export function computeResult(prev: ElectionState, inp: Inputs, winThreshold = TUNING.electWinThreshold) {
+  // 投票率 ≒ 100 - 無関心 + ノイズ
   const turnoutBase = 100 - inp.apathetic;
   const turnoutNoise = (Math.random() * 2 - 1) * TUNING.turnoutNoise;
   const turnout = clamp(turnoutBase + turnoutNoise, 0, 100);
 
-  // 簡易「支持率近似」 → 得票率
+  // 支持率近似 → 得票率（ベース）
   const approvalLike =
     (inp.conservative + inp.liberal) / 2 +
     (inp.credibility * 0.2) +
@@ -57,13 +58,25 @@ export function computeResult(prev: ElectionState, inp: Inputs) {
     Math.min(10, inp.followers * 0.01) -
     (inp.apathetic * 0.2);
 
-  const voteShare = clamp((approvalLike / 100) * (turnout / 100) * 100, 0, 100);
-  const won = voteShare >= TUNING.electWinThreshold;
+  const baseShare = clamp((approvalLike / 100) * (turnout / 100) * 100, 0, 100);
+
+  // 一貫性ペナルティ: consistency < 70 のとき得票率を減算
+  const consistencyPenalty = inp.consistency < 70
+    ? (70 - inp.consistency) * 0.4   // 最大 70*0.4=28 pt ダウン
+    : 0;
+  const voteShare = clamp(baseShare - consistencyPenalty, 0, 100);
+  const rivalShare = clamp(100 - voteShare, 0, 100);
+  const won = voteShare >= winThreshold;
 
   const next: ElectionState = {
     ...prev,
     phase: 'result',
-    lastResult: { turnout: Math.round(turnout), voteShare: Math.round(voteShare), won },
+    lastResult: {
+      turnout:    Math.round(turnout),
+      voteShare:  Math.round(voteShare),
+      rivalShare: Math.round(rivalShare),
+      won,
+    },
   };
   return next;
 }

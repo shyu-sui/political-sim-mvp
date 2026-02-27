@@ -1,0 +1,153 @@
+.va-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.va-panel {
+  background: #0f172a;
+  border: 2px solid #3b82f6;
+  border-radius: 16px;
+  padding: 28px 32px;
+  width: 90%;
+  max-width: 460px;
+  color: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+}
+
+/* ヘッダー */
+.va-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.va-icon  { font-size: 22px; }
+.va-title { font-size: 18px; font-weight: 700; color: #93c5fd; flex: 1; }
+.va-turnout { font-size: 12px; color: #64748b; }
+
+/* バーグラフ */
+.va-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.va-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.va-name {
+  width: 88px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.va-name-player { color: #60a5fa; }
+.va-name-rival  { color: #f87171; }
+
+.va-bar-bg {
+  flex: 1;
+  height: 30px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.va-bar {
+  height: 100%;
+  border-radius: 4px;
+  /* transition を短くして刻み感を演出 */
+  transition: width 0.04s linear;
+}
+.va-bar-player {
+  background: linear-gradient(90deg, #1d4ed8, #60a5fa);
+}
+.va-bar-rival {
+  background: linear-gradient(90deg, #991b1b, #f87171);
+}
+
+.va-pct {
+  width: 38px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* 当選ライン */
+.va-threshold-line {
+  display: flex;
+  justify-content: center;
+  font-size: 11px;
+  color: #475569;
+  border-top: 1px dashed #334155;
+  padding-top: 8px;
+}
+
+/* ステータス */
+.va-status {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 16px;
+  border-radius: 10px;
+}
+
+.va-counting {
+  color: #94a3b8;
+  background: #1e293b;
+  animation: va-pulse 1s ease-in-out infinite;
+}
+
+.va-win {
+  color: #4ade80;
+  background: #052e16;
+  border: 1px solid #16a34a;
+  animation: va-pop 0.4s ease-out;
+}
+
+.va-lose {
+  color: #f87171;
+  background: #1c0a0a;
+  border: 1px solid #991b1b;
+  animation: va-pop 0.4s ease-out;
+}
+
+@keyframes va-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+@keyframes va-pop {
+  0%   { transform: scale(0.92); opacity: 0; }
+  60%  { transform: scale(1.04); }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+/* 閉じるボタン */
+.va-close-btn {
+  width: 100%;
+  padding: 11px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.va-close-btn:hover { background: #2563eb; }

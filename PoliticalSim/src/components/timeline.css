@@ -138,7 +138,25 @@
 .tl-actions button:hover {
   background: #f1f5f9;
 }
+.tl-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* SNS プラットフォーム選択サブメニュー */
+.tl-sns-menu {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px;
+  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px;
+  margin-top: -4px;
+}
+.tl-sns-menu button {
+  padding: 7px 14px; border-radius: 8px; font-size: 13px;
+  border: 1px solid #86efac; background: #dcfce7; cursor: pointer;
+}
+.tl-sns-menu button:hover:not(:disabled) { background: #bbf7d0; }
+.tl-sns-menu button:disabled { opacity: 0.4; cursor: not-allowed; }
+.tl-sns-cancel {
+  border-color: #cbd5e1 !important; background: #f8fafc !important; color: #64748b;
+}
+.tl-sns-cancel:hover { background: #f1f5f9 !important; }
 
 /* ステータスバー */
 .tl-statusbar {
@@ -237,6 +255,23 @@
   opacity: .6;
   cursor: not-allowed;
 }
+
+/* Phase3: 次の期へボタン */
+.tl-nextperiod {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #78350f, #92400e);
+  color: #fde68a;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.tl-nextperiod:hover:not(:disabled) { filter: brightness(1.15); }
+.tl-nextperiod:disabled { opacity: .5; cursor: not-allowed; }
 
 /* カードのアニメ */
 @keyframes tl-fade-in {

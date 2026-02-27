@@ -840,7 +840,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       <FinishBanner
         cleared={isCleared}
         over={isGameOver}
+        stage={isCouncilor ? 'cityCouncil' : 'citizen'}
         onReset={resetAll}
+        onNextStage={handleElectionJoin}
       />
 
       <div className="tl-goal">

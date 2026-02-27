@@ -8,8 +8,8 @@ export const TUNING = {
   snsInfluenceCap: 2.5,       // 影響倍率の上限
   lifeEventProb: 0.10,        // 人生イベント確率（nextDay）
   newsDailyProb: 0.90,        // 日次ニュース確率
-  // クリア/オーバー判定の閾値
-  clear:       { credibility: 80, comm: 70, followers: 1000, apathetic: 40 },
+  // クリア/オーバー判定の閾値（市議選挑戦ライン：街頭演説・友達・SNS を数回で達成できるレベル）
+  clear:       { credibility: 55, comm: 55, followers: 150, apathetic: 55 },
   gameOver:    { apathetic: 90, energy: 0 },
   // 選挙関連（必要に応じて）
   electWinThreshold: 50,

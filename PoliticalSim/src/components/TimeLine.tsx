@@ -26,7 +26,7 @@ import {
   type BeliefScore, type ScandalState, type ScandalChoice, type DebateState,
 } from '../types/gameTypes';
 import DebateBattle, { createDebateState } from './battle/DebateBattle';
-import ScandalEvent, { createSecretaryScandal } from './scandal/ScandalEvent';
+import ScandalEvent from './scandal/ScandalEvent';
 
 export type EventCategory = 'news' | 'sns' | 'friend' | 'action' | 'system';
 export type Impact = 'good' | 'bad' | 'neutral';
@@ -295,12 +295,6 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         }, ...prev]);
       }
 
-      // Day 3 にスキャンダル自動発生（初回のみ）
-      if (day + 1 === 3 && !scandalTriggered) {
-        setScandalTriggered(true);
-        setActiveScandal(createSecretaryScandal());
-      }
-
       const flags = checkGameState({ isGameOver, isCleared }, status, opinion, followers);
       if (flags.isGameOver && !isGameOver) {
         setIsGameOver(true);
@@ -385,18 +379,17 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     }, ...prev]);
   }
 
-  const addActionEvent = (type: 'vote' | 'talk' | 'post') => {
+  const addActionEvent = (type: 'speech' | 'talk' | 'post') => {
     const date = `Day ${day}`;
-    if (type === 'vote') {
-      const deltaApa = -3;
-      setStatus(s => ({ ...s, credibility: Math.min(100, s.credibility + 2), energy: Math.max(0, s.energy - 5) }));
+    if (type === 'speech') {
+      const deltaApa = -4;
+      setStatus(s => ({ ...s, credibility: Math.min(100, s.credibility + 3), energy: Math.max(0, s.energy - 3) }));
       setOpinion(o => ({ ...o, apathetic: Math.max(0, o.apathetic + deltaApa) }));
-      // 投票は信念一貫性に微小プラス
       setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency + 1, 0, 100) }));
       setEvents(prev => [{
         id: crypto.randomUUID(), date, category: 'action',
-        title: '投票に行った',
-        description: '自分の意思を示したことで周囲の関心がわずかに向上。',
+        title: '街頭演説を聴いた',
+        description: '候補者の訴えに耳を傾け、政治への関心が高まった。',
         impact: 'good', delta: { apa: deltaApa },
       }, ...prev]);
       maybePushNews();
@@ -717,14 +710,13 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       </div>
 
       <div className="tl-actions">
-        <button onClick={() => addActionEvent('vote')} disabled={ap <= 0 || isGameOver || isCleared}>投票に行く</button>
-        <button onClick={() => addActionEvent('talk')} disabled={ap <= 0 || isGameOver || isCleared}>友達と話す</button>
-        <button onClick={() => addActionEvent('post')} disabled={ap <= 0 || isGameOver || isCleared}>SNSに投稿</button>
+        <button onClick={() => addActionEvent('speech')} disabled={ap <= 0 || isGameOver || isCleared}>街頭演説を聴く</button>
+        <button onClick={() => addActionEvent('talk')}   disabled={ap <= 0 || isGameOver || isCleared}>友達と話す</button>
+        <button onClick={() => addActionEvent('post')}   disabled={ap <= 0 || isGameOver || isCleared}>SNSに投稿</button>
         <button
-          onClick={startDebate}
-          disabled={ap < 2 || isGameOver || isCleared}
+          disabled
           className="tl-btn-debate"
-          title="AP2消費"
+          title="市議議員に当選後に解放されます"
         >
           ⚔️ 討論
         </button>

@@ -363,6 +363,28 @@
 .tl-belief-axis span { font-size: 11px !important; }
 .tl-belief-axis strong { font-size: 13px !important; width: 2.5ch !important; }
 
+/* 選挙バナー: 情勢調査ボタン */
+.tl-btn-survey {
+  background: #1d4ed8 !important;
+  color: #eff6ff !important;
+  border-color: #3b82f6 !important;
+  font-weight: 600;
+}
+.tl-btn-survey:hover:not(:disabled) {
+  background: #2563eb !important;
+}
+
+/* 選挙バナー: 開票ボタン */
+.tl-btn-count {
+  background: #b91c1c !important;
+  color: #fff !important;
+  border-color: #ef4444 !important;
+  font-weight: 700;
+}
+.tl-btn-count:hover:not(:disabled) {
+  background: #dc2626 !important;
+}
+
 /* 討論ボタン */
 .tl-btn-debate {
   background: #0f172a !important;

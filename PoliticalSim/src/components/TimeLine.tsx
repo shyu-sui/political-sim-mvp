@@ -7,10 +7,11 @@ import { TUNING } from './config/tuning';
 
 import {
   initialElectionState, announceElection, joinElection, leaveElection,
-  openVoting, computeResult, type ElectionState
+  openVoting, computeResult, decrementDaysLeft, getCampaignPhase,
+  type ElectionState
 } from './election/electionLogic.ts';
 import ElectionBanner from './election/ElectionBanner.tsx';
-import ElectionCard from './election/ElectionCard';
+import ElectionCard from './election/ElectionCard.tsx';
 import VotingAnimation from './election/VotingAnimation';
 import CouncilEndModal from './council/CouncilEndModal';
 
@@ -143,6 +144,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const [speechDebateCount, setSpeechDebateCount] = useState(0);
   const [showSnsMenu, setShowSnsMenu] = useState(false);
 
+  // ---- 情勢調査モーダル ----
+  const [showSurvey, setShowSurvey] = useState(false);
+
   // ---- 市議当選後フェーズ ----
   const [isCouncilor, setIsCouncilor]             = useState(false);
   const [councilTurn, setCouncilTurn]             = useState(0);
@@ -203,27 +207,36 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   // ---------- 討論バトル結果ハンドラ ----------
   function handleDebateClose(res: { result: 'win' | 'lose'; consistencyDelta: number }) {
     const won = res.result === 'win';
+    // 選挙告示期間中は討論の注目度効果が2倍
+    const inElection = election.phase === 'announced' && election.participating;
+    const attnMul = inElection ? 2 : 1;
+
     setBeliefScore(b => ({ ...b, consistency: clamp(b.consistency + res.consistencyDelta, 0, 100) }));
     setOpinion(o => ({
       conservative: clamp(o.conservative + (won ? +3 : -3), 0, 100),
       liberal:      clamp(o.liberal      + (won ? +3 : -3), 0, 100),
-      apathetic:    clamp(o.apathetic    + (won ? -4 : +4), 0, 100),
+      apathetic:    clamp(o.apathetic    + (won ? -4 : +4) * attnMul, 0, 100),
     }));
     setStatus(s => ({
       ...s,
       credibility: clamp(s.credibility + (won ? +8 : -5), 0, 100),
       comm:        clamp(s.comm        + (won ? +5 : -2), 0, 100),
     }));
-    if (won) setFollowers(n => n + 200);
+    const followerGain = 200 * attnMul;
+    if (won) setFollowers(n => n + followerGain);
     setActiveDebate(null);
     setEvents(prev => [{
       id: crypto.randomUUID(), date: `Day ${day}`, category: 'action',
-      title: `討論バトル：${won ? '勝利！' : '敗北…'}`,
+      title: `討論バトル：${won ? '勝利！' : '敗北…'}${inElection ? '【選挙期間】' : ''}`,
       description: won
-        ? '鋭い論法で相手を圧倒。支持者が増加し、信頼が高まりました。'
-        : '議論で押し切られました。次回に備えて信念を整理しましょう。',
+        ? inElection
+          ? `選挙期間中の討論勝利！注目度が大幅に上昇し、支持者が${followerGain}人増加しました。`
+          : '鋭い論法で相手を圧倒。支持者が増加し、信頼が高まりました。'
+        : inElection
+          ? '選挙期間中の討論敗北。注目されていた分、無関心層が増加しました。'
+          : '議論で押し切られました。次回に備えて信念を整理しましょう。',
       impact: won ? 'good' : 'bad',
-      delta: { followers: won ? 200 : 0 },
+      delta: { followers: won ? followerGain : 0 },
     }, ...prev]);
     setAp(x => Math.max(0, x - 2)); // 討論は AP 2 消費
   }
@@ -302,6 +315,33 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       description: '世論が日々の話題でわずかに揺れています。', impact: 'neutral',
     }, ...prev]);
 
+    // 選挙告示中: daysLeft を1日減らす & 期日前投票期間の一貫性効果
+    if (election.phase === 'announced') {
+      const cp = getCampaignPhase(election.daysLeft);
+
+      // 期日前投票期間(5>=daysLeft>=1): 一貫性が高いほど支持率UP、低いほどDOWN
+      if (cp === 'early_voting' && election.participating) {
+        const consistencyBonus = (beliefScore.consistency - 50) * 0.05; // -2.5〜+2.5
+        setOpinion(o => ({
+          conservative: clamp(o.conservative + consistencyBonus * 0.5, 0, 100),
+          liberal:      clamp(o.liberal      + consistencyBonus * 0.5, 0, 100),
+          apathetic:    clamp(o.apathetic    - consistencyBonus * 0.3, 0, 100),
+        }));
+        if (Math.abs(consistencyBonus) >= 0.8) {
+          setEvents(prev => [{
+            id: crypto.randomUUID(), date: `Day ${day + 1}`, category: 'system',
+            title: consistencyBonus > 0 ? '期日前投票：支持率上昇' : '期日前投票：支持率低下',
+            description: consistencyBonus > 0
+              ? `一貫した主張が有権者に伝わっています（一貫性: ${Math.floor(beliefScore.consistency)}）`
+              : `発言の一貫性の低さが不信感につながっています（一貫性: ${Math.floor(beliefScore.consistency)}）`,
+            impact: consistencyBonus > 0 ? 'good' : 'bad',
+          }, ...prev]);
+        }
+      }
+
+      setElection(prev => decrementDaysLeft(prev));
+    }
+
     // 市議挑戦フェーズ: 一貫性が低いほどスキャンダルが発生しやすい
     if (isCleared && !isGameOver && !activeScandal.active) {
       const scandalProb = (100 - beliefScore.consistency) / 400; // 最大25%/日
@@ -353,8 +393,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     setElection(joinElection(announced));
   };
 
-  // 投票ボタン：結果を計算してアニメーションを表示
-  const handleElectionVote = () => {
+  // 開票ボタン（選挙当日のみ有効）：結果を計算してアニメーションを表示
+  const handleElectionCount = () => {
     const withVoting = openVoting(election);
     const finalState = computeResult(withVoting, {
       conservative: opinion.conservative,
@@ -449,8 +489,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     setIsCouncilor(false);
     setCouncilTurn(0);
     setShowCouncilEndModal(false);
-    // 選挙を即公示状態にして再挑戦できるようにする
-    setElection({ ...initialElectionState(), phase: 'announced', month, year });
+    // 選挙を公示状態にして再挑戦（daysLeft を正しくセット）
+    setElection(announceElection(initialElectionState(), month, year));
     setEvents(prev => [{
       id: crypto.randomUUID(), date: `Y${year}-M${month}`, category: 'system',
       title: '市議選再挑戦を決意',
@@ -704,7 +744,7 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       setEvents(d.events); setFriends(d.friends); setFollowers(d.followers);
       setStatus(d.status); setOpinion(d.opinion); setFilter(d.filter);
       setDay(d.day); setMonth(d.month); setYear(d.year); setAp(d.ap);
-      setElection(d.election); setIsGameOver(d.isGameOver); setIsCleared(d.isCleared);
+      setElection({ ...d.election, daysLeft: d.election.daysLeft ?? 0 }); setIsGameOver(d.isGameOver); setIsCleared(d.isCleared);
       if (d.playerName)  setPlayerName(d.playerName);
       if (d.charType)    setCharType(d.charType);
       if (d.beliefScore) setBeliefScore(d.beliefScore);
@@ -785,6 +825,79 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         />
       )}
 
+      {/* ---- 情勢調査モーダル ---- */}
+      {showSurvey && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999,
+        }}>
+          <div style={{
+            background: '#1e293b', color: '#f1f5f9', padding: '24px 28px',
+            borderRadius: 14, maxWidth: 360, width: '90%',
+            border: '1px solid #334155', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          }}>
+            <h3 style={{ margin: '0 0 18px', color: '#f8fafc', fontSize: '1.15em' }}>📊 情勢調査</h3>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>現在の支持率</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: 12, background: '#0f172a', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.min(100, Math.max(0, approvalRate))}%`,
+                    height: '100%',
+                    background: approvalRate >= 50 ? '#22c55e' : approvalRate >= 35 ? '#f59e0b' : '#ef4444',
+                    borderRadius: 6,
+                  }} />
+                </div>
+                <strong style={{ color: '#f8fafc', minWidth: 42, textAlign: 'right' }}>
+                  {Math.floor(approvalRate)}%
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>一貫性スコア</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: 12, background: '#0f172a', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${beliefScore.consistency}%`,
+                    height: '100%',
+                    background: beliefScore.consistency >= 60 ? '#22c55e' : '#f59e0b',
+                    borderRadius: 6,
+                  }} />
+                </div>
+                <strong style={{ color: '#f8fafc', minWidth: 42, textAlign: 'right' }}>
+                  {Math.floor(beliefScore.consistency)}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{
+              padding: '10px 14px', background: '#0f172a', borderRadius: 8,
+              color: '#94a3b8', fontSize: '0.9em', lineHeight: 1.6, marginBottom: 18,
+            }}>
+              {approvalRate >= 60 && beliefScore.consistency >= 70
+                ? '情勢は良好です。一貫した主張が有権者に届いています。このまま押し切りましょう。'
+                : approvalRate >= 50
+                ? '当選圏内ですが接戦です。一貫性を保って最後まで訴え続けましょう。'
+                : approvalRate >= 35
+                ? '苦しい情勢です。期日前投票期間中は一貫性が支持率に直結します。今すぐ改善を。'
+                : '非常に厳しい情勢です。あきらめずに活動し、一貫した主張を続けてください。'
+              }
+            </div>
+
+            <button
+              onClick={() => setShowSurvey(false)}
+              style={{
+                width: '100%', padding: '10px 0', background: '#334155',
+                color: '#f1f5f9', border: 'none', borderRadius: 8,
+                cursor: 'pointer', fontSize: '0.95em',
+              }}
+            >閉じる</button>
+          </div>
+        </div>
+      )}
+
       {/* ---- スキャンダルモーダル ---- */}
       {activeScandal.active && (
         <ScandalEvent state={activeScandal} onClose={handleScandalClose} />
@@ -844,7 +957,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
           state={election}
           onJoin={handleElectionJoin}
           onLeave={handleElectionLeave}
-          onOpenVoting={handleElectionVote}
+          onOpenCounting={handleElectionCount}
+          onShowSurvey={() => setShowSurvey(true)}
         />
       </div>
 
@@ -919,8 +1033,11 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         {election.phase === 'announced' && (
           <ElectionCard
             dateLabel={`Month ${election.month}, Year ${election.year}`}
+            daysLeft={election.daysLeft}
+            participating={election.participating}
             onJoin={handleElectionJoin}
-            onOpenVoting={handleElectionVote}
+            onShowSurvey={() => setShowSurvey(true)}
+            onOpenCounting={handleElectionCount}
           />
         )}
 

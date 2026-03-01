@@ -48,71 +48,61 @@
   font-weight: 600;
 }
 
-.db-hp-area {
+/* 相手カード（イントロ画面） */
+.db-opponent-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid #334155;
 }
 
-.db-fighter {
-  flex: 1;
+.db-opp-avatar-lg {
+  font-size: 2.4em;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.db-opp-info {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
-.db-fighter-name {
-  font-size: 0.88em;
+.db-opp-name {
+  font-size: 1em;
   font-weight: 700;
   color: #f8fafc;
 }
 
-.db-fighter-party {
-  font-size: 0.75em;
-  color: #94a3b8;
-}
-
-.db-hp-bar-wrap {
-  height: 10px;
-  background: #0f172a;
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.db-hp-bar-fill {
-  height: 100%;
-  border-radius: 5px;
-  transition: width 0.4s ease;
-}
-
-.db-hp-num {
+.db-opp-party {
   font-size: 0.78em;
   color: #94a3b8;
-  text-align: center;
-}
-
-.db-vs {
-  font-size: 1.1em;
-  font-weight: 800;
-  color: #f59e0b;
-  flex-shrink: 0;
 }
 
 .db-round-info {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   font-size: 0.82em;
   color: #94a3b8;
   background: #0f172a;
   padding: 6px 12px;
   border-radius: 8px;
+  flex-wrap: wrap;
 }
 
 .db-round-type {
   font-weight: 600;
   color: #60a5fa;
+}
+
+.db-opp-name-chip {
+  margin-left: auto;
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
 .db-opp-bubble {
@@ -190,6 +180,7 @@
   color: #bfdbfe;
   text-align: center;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .db-next-btn {
@@ -209,11 +200,79 @@
   background: #2563eb;
 }
 
+/* ===== 評価パネル ===== */
+.db-eval-panel {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.db-eval-title {
+  font-size: 0.78em;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.db-eval-tier {
+  font-size: 1.1em;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: 8px;
+  text-align: center;
+}
+.db-eval-excellent { background: #14532d; color: #86efac; border: 1px solid #22c55e; }
+.db-eval-good      { background: #1e3a5f; color: #93c5fd; border: 1px solid #3b82f6; }
+.db-eval-average   { background: #1c1917; color: #d6d3d1; border: 1px solid #57534e; }
+.db-eval-poor      { background: #450a0a; color: #fca5a5; border: 1px solid #ef4444; }
+
+.db-eval-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.db-eval-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85em;
+}
+
+.db-eval-label { color: #94a3b8; }
+.db-eval-val   { font-weight: 700; color: #e2e8f0; }
+.db-eval-val.pos { color: #4ade80; }
+.db-eval-val.neg { color: #f87171; }
+
+.db-eval-approval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88em;
+  color: #94a3b8;
+  border-top: 1px solid #1e293b;
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+.db-eval-bonus {
+  font-size: 1.1em;
+  font-weight: 800;
+}
+.db-eval-bonus.pos { color: #4ade80; }
+.db-eval-bonus.neg { color: #f87171; }
+
+/* ===== 結果バナー ===== */
 .db-result-banner {
   text-align: center;
   padding: 14px;
   border-radius: 10px;
-  font-size: 1.15em;
+  font-size: 1em;
   font-weight: 800;
 }
 

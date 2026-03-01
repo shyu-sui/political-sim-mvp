@@ -38,32 +38,12 @@ export type Party = {
   description:  string;
 };
 
-// --- 討論バトル ---
-export type DebateSkill =
-  | 'logic_attack'      // ロジックアタック
-  | 'data_shield'       // データシールド
-  | 'emotional_appeal'  // 感情訴求
-  | 'nitpick';          // 揚げ足取り
-
-export type DebateLogEntry = {
-  actor:   'player' | 'opponent';
-  skill:   DebateSkill;
-  message: string;
-  damage:  number;
-};
-
+// --- 討論 ---
 export type DebateState = {
   active:        boolean;
   opponentName:  string;
   opponentParty: string;
   topic:         string;
-  playerHP:      number;
-  opponentHP:    number;
-  maxHP:         number;
-  shielded:      boolean; // データシールド使用中
-  turn:          'player' | 'opponent' | 'done';
-  log:           DebateLogEntry[];
-  result?:       'win' | 'lose';
 };
 
 export const defaultDebateState = (): DebateState => ({
@@ -71,12 +51,6 @@ export const defaultDebateState = (): DebateState => ({
   opponentName:  '',
   opponentParty: '',
   topic:         '',
-  playerHP:      100,
-  opponentHP:    80,
-  maxHP:         100,
-  shielded:      false,
-  turn:          'player',
-  log:           [],
 });
 
 // --- スキャンダルイベント ---

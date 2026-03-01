@@ -11,32 +11,70 @@ export interface DebateCloseResult {
   result:            'win' | 'lose';
   consistencyDelta:  number;
   conservativeDelta: number;
-  approvalDelta:     number;
+  approvalDelta:     number; // チョイス累計 + 評価ボーナス
 }
+
+type EvalTier = 'excellent' | 'good' | 'average' | 'poor';
+
+const EVAL_LABELS: Record<EvalTier, string> = {
+  excellent: '優秀 ★★★★★',
+  good:      '良好 ★★★☆☆',
+  average:   '普通 ★★☆☆☆',
+  poor:      '不十分 ★☆☆☆☆',
+};
+const EVAL_APPROVAL: Record<EvalTier, number> = {
+  excellent: +8,
+  good:      +4,
+  average:    0,
+  poor:      -4,
+};
 
 interface Props {
   state:   DebateState;
   onClose: (result: DebateCloseResult) => void;
 }
 
-function hpColor(hp: number, max: number) {
-  const pct = hp / max;
-  if (pct > 0.5) return '#22c55e';
-  if (pct > 0.25) return '#f59e0b';
-  return '#ef4444';
+/** 思想タイプと保守方向の相性スコア (0–1) */
+function ideologyMatchScore(opp: DebateOpponent, totalConservative: number): number {
+  const cons  = ['conservative', 'nationalist'];
+  const liber = ['liberal', 'progressive'];
+  if (cons.includes(opp.ideology))  return totalConservative > 0 ? 1 : totalConservative < 0 ? 0 : 0.5;
+  if (liber.includes(opp.ideology)) return totalConservative < 0 ? 1 : totalConservative > 0 ? 0 : 0.5;
+  return 0.5; // centrist
+}
+
+function calcEvalTier(
+  totalPersuasion: number,
+  totalConsistency: number,
+  totalConservative: number,
+  rounds: number,
+  opp: DebateOpponent,
+): EvalTier {
+  const MAX_PERSUASION_PER_ROUND = 5;
+  const persuasionRatio  = Math.min(1, totalPersuasion / (MAX_PERSUASION_PER_ROUND * rounds));
+  const consistencyRatio = Math.min(1, Math.max(0, totalConsistency) / (rounds * 4));
+  const ideologyRatio    = ideologyMatchScore(opp, totalConservative);
+
+  const score = persuasionRatio * 50 + consistencyRatio * 25 + ideologyRatio * 25;
+
+  if (score >= 70) return 'excellent';
+  if (score >= 45) return 'good';
+  if (score >= 20) return 'average';
+  return 'poor';
 }
 
 export default function DebateBattle({ state: initState, onClose }: Props) {
-  const [playerHP,   setPlayerHP]   = useState(initState.playerHP);
-  const [opponentHP, setOpponentHP] = useState(initState.opponentHP);
-  const [roundIdx,   setRoundIdx]   = useState(0);
-  const [phase,      setPhase]      = useState<'intro' | 'showing' | 'feedback' | 'done'>('intro');
-  const [feedback,   setFeedback]   = useState('');
-  const [gameResult, setGameResult] = useState<'win' | 'lose' | null>(null);
+  const [roundIdx,         setRoundIdx]         = useState(0);
+  const [phase,            setPhase]            = useState<'intro' | 'showing' | 'feedback' | 'done'>('intro');
+  const [feedback,         setFeedback]         = useState('');
+  const [evalTier,         setEvalTier]         = useState<EvalTier>('average');
+  const [finalApproval,    setFinalApproval]    = useState(0);
+  const [gameResult,       setGameResult]       = useState<'win' | 'lose' | null>(null);
 
   const [totalConsistency,  setTotalConsistency]  = useState(0);
   const [totalConservative, setTotalConservative] = useState(0);
   const [totalApproval,     setTotalApproval]     = useState(0);
+  const [totalPersuasion,   setTotalPersuasion]   = useState(0);
 
   const [opponent] = useState<DebateOpponent>(() =>
     DEBATE_OPPONENTS.find(o => o.name === initState.opponentName) ?? getRandomOpponent()
@@ -46,32 +84,35 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
     ?? getDebateThemeForOpponent(opponent)
   );
 
-  const maxHP = initState.maxHP;
-  const totalRounds = theme.rounds.length;
-  const currentRound = theme.rounds[roundIdx];
+  const totalRounds   = theme.rounds.length;
+  const currentRound  = theme.rounds[roundIdx];
+  const catLabel      = CATEGORY_LABELS[theme.category] ?? theme.category;
 
   function handleChoice(idx: number) {
     if (phase !== 'showing') return;
     const { effect } = currentRound.choices[idx];
 
-    const newPlayerHP   = Math.max(0, Math.min(maxHP, playerHP   + effect.playerHPDelta));
-    const newOpponentHP = Math.max(0, Math.min(maxHP, opponentHP + effect.opponentHPDelta));
+    const newConsistency  = totalConsistency  + effect.consistencyDelta;
+    const newConservative = totalConservative + effect.conservativeDelta;
+    const newApproval     = totalApproval     + effect.approvalDelta;
+    const newPersuasion   = totalPersuasion   + effect.persuasion;
 
-    setPlayerHP(newPlayerHP);
-    setOpponentHP(newOpponentHP);
-    setTotalConsistency(d  => d + effect.consistencyDelta);
-    setTotalConservative(d => d + effect.conservativeDelta);
-    setTotalApproval(d     => d + effect.approvalDelta);
+    setTotalConsistency(newConsistency);
+    setTotalConservative(newConservative);
+    setTotalApproval(newApproval);
+    setTotalPersuasion(newPersuasion);
     setFeedback(effect.message);
 
-    if (newOpponentHP <= 0) {
-      setGameResult('win');
-      setPhase('done');
-    } else if (newPlayerHP <= 0) {
-      setGameResult('lose');
-      setPhase('done');
-    } else if (roundIdx >= totalRounds - 1) {
-      setGameResult(newPlayerHP >= newOpponentHP ? 'win' : 'lose');
+    const isLastRound = roundIdx >= totalRounds - 1;
+
+    if (isLastRound) {
+      // 評価計算
+      const tier   = calcEvalTier(newPersuasion, newConsistency, newConservative, totalRounds, opponent);
+      const bonus  = EVAL_APPROVAL[tier];
+      const finalA = newApproval + bonus;
+      setEvalTier(tier);
+      setFinalApproval(finalA);
+      setGameResult(finalA > 0 ? 'win' : 'lose');
       setPhase('done');
     } else {
       setPhase('feedback');
@@ -90,34 +131,8 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
       result:            gameResult,
       consistencyDelta:  totalConsistency,
       conservativeDelta: totalConservative,
-      approvalDelta:     totalApproval,
+      approvalDelta:     finalApproval,
     });
-  }
-
-  const catLabel = CATEGORY_LABELS[theme.category] ?? theme.category;
-
-  // ===== 共通HP表示 =====
-  function HPArea() {
-    return (
-      <div className="db-hp-area">
-        <div className="db-fighter db-player">
-          <div className="db-fighter-name">あなた</div>
-          <div className="db-hp-bar-wrap">
-            <div className="db-hp-bar-fill" style={{ width: `${(playerHP / maxHP) * 100}%`, background: hpColor(playerHP, maxHP) }} />
-          </div>
-          <div className="db-hp-num">{playerHP} / {maxHP}</div>
-        </div>
-        <div className="db-vs">VS</div>
-        <div className="db-fighter db-opponent">
-          <div className="db-fighter-name">{opponent.icon} {opponent.name}</div>
-          <div className="db-fighter-party">{opponent.party}</div>
-          <div className="db-hp-bar-wrap">
-            <div className="db-hp-bar-fill" style={{ width: `${(opponentHP / maxHP) * 100}%`, background: hpColor(opponentHP, maxHP) }} />
-          </div>
-          <div className="db-hp-num">{opponentHP} / {maxHP}</div>
-        </div>
-      </div>
-    );
   }
 
   // ===== イントロ =====
@@ -127,14 +142,20 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
         <div className="db-panel">
           <div className="db-header">
             <span className="db-tag">{catLabel}</span>
-            <span className="db-topic">今回の議題：{theme.theme}</span>
+            <span className="db-topic">議題：{theme.theme}</span>
           </div>
-          <HPArea />
+          <div className="db-opponent-card">
+            <div className="db-opp-avatar-lg">{opponent.icon}</div>
+            <div className="db-opp-info">
+              <div className="db-opp-name">{opponent.name}</div>
+              <div className="db-opp-party">{opponent.party}</div>
+            </div>
+          </div>
           <div className="db-opp-bubble">
             <div className="db-opp-avatar">{opponent.icon}</div>
             <div className="db-opp-text">{theme.opponentOpening}</div>
           </div>
-          <div className="db-intro-hint">全 {totalRounds} ラウンドの討論です。選択肢を選んで討論しましょう。</div>
+          <div className="db-intro-hint">全 {totalRounds} ラウンド。支持率が上がれば勝利です。</div>
           <button className="db-next-btn" onClick={() => setPhase('showing')}>討論を始める</button>
         </div>
       </div>
@@ -143,6 +164,7 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
 
   // ===== 結果 =====
   if (phase === 'done' && gameResult) {
+    const evalBonus = EVAL_APPROVAL[evalTier];
     return (
       <div className="db-overlay">
         <div className="db-panel">
@@ -150,16 +172,53 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
             <span className="db-tag">{catLabel}</span>
             <span className="db-topic">{theme.theme}</span>
           </div>
-          <HPArea />
-          {feedback && <div className="db-feedback-msg">{feedback}</div>}
-          <div className={`db-result-banner ${gameResult === 'win' ? 'win' : 'lose'}`}>
-            {gameResult === 'win' ? '🎉 討論勝利！' : '😔 討論敗北…'}
+
+          {/* 評価パネル */}
+          <div className="db-eval-panel">
+            <div className="db-eval-title">今回の討論評価</div>
+            <div className={`db-eval-tier db-eval-${evalTier}`}>{EVAL_LABELS[evalTier]}</div>
+            <div className="db-eval-rows">
+              <div className="db-eval-row">
+                <span className="db-eval-label">説得力スコア</span>
+                <span className="db-eval-val">{totalPersuasion} pt</span>
+              </div>
+              {totalConsistency !== 0 && (
+                <div className="db-eval-row">
+                  <span className="db-eval-label">一貫性ボーナス</span>
+                  <span className={`db-eval-val ${totalConsistency > 0 ? 'pos' : 'neg'}`}>
+                    {totalConsistency > 0 ? '+' : ''}{totalConsistency}
+                  </span>
+                </div>
+              )}
+              {totalConservative !== 0 && (
+                <div className="db-eval-row">
+                  <span className="db-eval-label">思想変動</span>
+                  <span className="db-eval-val">
+                    {totalConservative > 0 ? '保守寄り' : 'リベラル寄り'} {Math.abs(totalConservative)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="db-eval-approval">
+              評価ボーナス　支持率
+              <span className={`db-eval-bonus ${evalBonus >= 0 ? 'pos' : 'neg'}`}>
+                {evalBonus >= 0 ? '+' : ''}{evalBonus}
+              </span>
+            </div>
           </div>
+
+          {feedback && <div className="db-feedback-msg">{feedback}</div>}
+
+          <div className={`db-result-banner ${gameResult === 'win' ? 'win' : 'lose'}`}>
+            {gameResult === 'win' ? '🎉 討論勝利！支持率が上昇しました。' : '😔 討論敗北…支持率が下がりました。'}
+          </div>
+
           <div className="db-result-deltas">
+            <span>支持率 {finalApproval >= 0 ? '+' : ''}{finalApproval}</span>
             {totalConsistency  !== 0 && <span>一貫性 {totalConsistency  > 0 ? '+' : ''}{totalConsistency}</span>}
             {totalConservative !== 0 && <span>保守 {totalConservative > 0 ? '+' : ''}{totalConservative}</span>}
-            {totalApproval     !== 0 && <span>支持率 {totalApproval   > 0 ? '+' : ''}{totalApproval}</span>}
           </div>
+
           <button className="db-close-btn" onClick={handleClose}>閉じる</button>
         </div>
       </div>
@@ -174,10 +233,11 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
           <span className="db-tag">{catLabel}</span>
           <span className="db-topic">{theme.theme}</span>
         </div>
-        <HPArea />
+
         <div className="db-round-info">
           ラウンド {roundIdx + 1} / {totalRounds}
           <span className="db-round-type">{currentRound.type === 'question' ? '❓ 質問' : '💬 意見'}</span>
+          <span className="db-opp-name-chip">{opponent.icon} {opponent.name}</span>
         </div>
 
         {phase === 'showing' && (
@@ -207,12 +267,10 @@ export default function DebateBattle({ state: initState, onClose }: Props) {
   );
 }
 
-// ファクトリー: 討論バトル開始時の初期状態を生成
+// ファクトリー: 討論開始時の初期状態を生成
 export function createDebateState(params: {
   opponentName?:  string;
-  opponentParty?: string;
   topic?:         string;
-  opponentHP?:    number;
 }): import('../../types/gameTypes').DebateState {
   const opponent = params.opponentName
     ? (DEBATE_OPPONENTS.find(o => o.name === params.opponentName) ?? getRandomOpponent())
@@ -226,11 +284,5 @@ export function createDebateState(params: {
     opponentName:  opponent.name,
     opponentParty: opponent.party,
     topic:         theme.theme,
-    playerHP:      100,
-    opponentHP:    params.opponentHP ?? 80,
-    maxHP:         100,
-    shielded:      false,
-    turn:          'player',
-    log:           [],
   };
 }

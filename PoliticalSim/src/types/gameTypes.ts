@@ -11,6 +11,7 @@ export type BeliefScore = {
   environment: number; // 環境: 高=環境優先 / 低=経済優先
   foreign:     number; // 外交: 高=グローバル / 低=自国優先
   consistency: number; // 一貫性 (0–100): 矛盾発言で低下
+  conservative: number; // プレイヤーの保守度 (0–100): リベラル = 100 - conservative
 };
 
 export const defaultBeliefScore = (): BeliefScore => ({
@@ -20,6 +21,7 @@ export const defaultBeliefScore = (): BeliefScore => ({
   environment: 50,
   foreign:     50,
   consistency: 70,
+  conservative: 50,
 });
 
 // --- 架空政党 ---

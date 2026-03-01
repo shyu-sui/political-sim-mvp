@@ -1,200 +1,262 @@
 .db-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.75);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 16px;
 }
 
 .db-panel {
-  width: 100%;
-  max-width: 480px;
-  background: #0f172a;
+  background: #1e293b;
+  color: #f1f5f9;
   border-radius: 16px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid #334155;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  color: #f8fafc;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-  max-height: 90dvh;
-  overflow-y: auto;
 }
 
-/* ヘッダー */
 .db-header {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
+
 .db-tag {
-  background: #1e3a5f;
-  color: #93c5fd;
-  font-size: 12px;
+  background: #3b82f6;
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.78em;
   font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
+
 .db-topic {
-  font-size: 14px;
-  color: #cbd5e1;
+  font-size: 0.95em;
+  color: #e2e8f0;
   font-weight: 600;
 }
 
-/* HP エリア */
 .db-hp-area {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
+
 .db-fighter {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
+
 .db-fighter-name {
-  font-size: 13px;
+  font-size: 0.88em;
   font-weight: 700;
   color: #f8fafc;
 }
+
 .db-fighter-party {
-  font-size: 11px;
+  font-size: 0.75em;
   color: #94a3b8;
 }
+
 .db-hp-bar-wrap {
-  height: 12px;
-  background: #1e293b;
-  border-radius: 6px;
+  height: 10px;
+  background: #0f172a;
+  border-radius: 5px;
   overflow: hidden;
 }
+
 .db-hp-bar-fill {
   height: 100%;
-  border-radius: 6px;
-  transition: width 0.4s ease, background 0.4s ease;
+  border-radius: 5px;
+  transition: width 0.4s ease;
 }
+
 .db-hp-num {
-  font-size: 12px;
+  font-size: 0.78em;
   color: #94a3b8;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
-.db-shield-badge {
-  font-size: 11px;
-  color: #93c5fd;
-  background: #1e3a5f;
-  border-radius: 4px;
-  padding: 2px 6px;
-  width: fit-content;
-}
+
 .db-vs {
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 1.1em;
+  font-weight: 800;
   color: #f59e0b;
   flex-shrink: 0;
 }
 
-/* ターンバナー */
-.db-turn-banner {
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fbbf24;
-  background: #1e293b;
-  border-radius: 8px;
-  padding: 6px 10px;
-}
-.db-turn-banner.db-turn-opp {
-  color: #94a3b8;
-}
-
-/* 結果バナー */
-.db-result-banner {
+.db-round-info {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 700;
-}
-.db-result-banner.win  { background: #14532d; color: #86efac; }
-.db-result-banner.lose { background: #7f1d1d; color: #fca5a5; }
-.db-close-btn {
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.82em;
+  color: #94a3b8;
+  background: #0f172a;
   padding: 6px 12px;
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 6px;
-  color: #f8fafc;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
+  border-radius: 8px;
 }
-.db-close-btn:hover { background: rgba(255,255,255,0.25); }
 
-/* スキルボタン */
-.db-skills {
+.db-round-type {
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.db-opp-bubble {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 14px;
+  border-left: 3px solid #ef4444;
+}
+
+.db-opp-avatar {
+  font-size: 1.8em;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.db-opp-text {
+  font-size: 0.92em;
+  line-height: 1.65;
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.db-intro-hint {
+  font-size: 0.82em;
+  color: #64748b;
+  text-align: center;
+}
+
+.db-choices {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-.db-skill-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  text-align: left;
-}
-.db-skill-btn:hover:not(.disabled) {
-  background: #263959;
-  border-color: #60a5fa;
-}
-.db-skill-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.db-sk-icon  { font-size: 20px; }
-.db-sk-label { font-size: 13px; font-weight: 700; color: #f8fafc; }
-.db-sk-risk  { font-size: 11px; font-weight: 600; }
 
-/* ログ */
-.db-log {
+.db-choice-btn {
+  background: #334155;
+  color: #f1f5f9;
+  border: 1px solid #475569;
+  border-radius: 10px;
+  padding: 12px 10px;
+  font-size: 0.85em;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.4;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  font-weight: 500;
+}
+
+.db-choice-btn:hover {
+  background: #3b82f6;
+  border-color: #60a5fa;
+  transform: translateY(-1px);
+}
+
+.db-choice-btn:active {
+  transform: translateY(0);
+}
+
+.db-feedback-panel {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 160px;
-  overflow-y: auto;
-  background: #0a0f1a;
-  border-radius: 8px;
-  padding: 8px 10px;
+  gap: 12px;
+  align-items: center;
 }
-.db-log-line {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  font-size: 12px;
-  line-height: 1.4;
+
+.db-feedback-msg {
+  background: #1e3a5f;
+  border: 1px solid #3b82f6;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.9em;
+  color: #bfdbfe;
+  text-align: center;
+  width: 100%;
 }
-.db-log-line.player   { color: #86efac; }
-.db-log-line.opponent { color: #fca5a5; }
-.db-log-actor {
+
+.db-next-btn {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 28px;
+  font-size: 0.92em;
   font-weight: 700;
-  flex-shrink: 0;
-  min-width: 40px;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
 }
-.db-log-skill {
+
+.db-next-btn:hover {
+  background: #2563eb;
+}
+
+.db-result-banner {
+  text-align: center;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 1.15em;
+  font-weight: 800;
+}
+
+.db-result-banner.win {
+  background: #14532d;
+  color: #86efac;
+  border: 1px solid #22c55e;
+}
+
+.db-result-banner.lose {
+  background: #450a0a;
+  color: #fca5a5;
+  border: 1px solid #ef4444;
+}
+
+.db-result-deltas {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.db-result-deltas span {
+  background: #0f172a;
   color: #94a3b8;
-  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.82em;
 }
-.db-log-msg { flex: 1; }
+
+.db-close-btn {
+  background: #475569;
+  color: #f1f5f9;
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 0.92em;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s;
+}
+
+.db-close-btn:hover {
+  background: #64748b;
+}

@@ -399,3 +399,105 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* ===== ステータスミニバー（新）===== */
+.tl-statusmini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: #1e293b;
+  border-radius: 10px;
+  border: 1px solid #334155;
+}
+
+.tl-playername {
+  font-size: 0.82em;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+}
+
+.tl-stat-chip {
+  font-size: 0.78em;
+  color: #94a3b8;
+  background: #0f172a;
+  padding: 3px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.tl-status-btn {
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  background: #1e3a5f;
+  color: #93c5fd;
+  font-size: 0.8em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.tl-status-btn:hover { background: #2563eb; color: #fff; }
+
+.tl-btn-settings {
+  padding: 5px 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #94a3b8;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tl-btn-settings:hover { background: #334155; color: #f1f5f9; }
+
+/* ===== マイルストーンポップアップ ===== */
+.tl-milestone-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  cursor: pointer;
+}
+
+.tl-milestone-popup {
+  background: linear-gradient(135deg, #1e3a5f, #1e293b);
+  border: 2px solid #3b82f6;
+  border-radius: 20px;
+  padding: 28px 36px;
+  text-align: center;
+  max-width: 320px;
+  width: 90%;
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.4);
+  animation: milestone-pop 0.3s ease-out;
+}
+
+@keyframes milestone-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.tl-milestone-icon {
+  font-size: 2.8em;
+  margin-bottom: 12px;
+}
+
+.tl-milestone-text {
+  font-size: 1.1em;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.tl-milestone-hint {
+  font-size: 0.78em;
+  color: #64748b;
+}

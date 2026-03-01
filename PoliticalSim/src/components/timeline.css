@@ -286,13 +286,17 @@
 .tl-electionbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;      /* ボタンが増えても折り返す */
+  gap: 8px 12px;
   padding: 8px 10px;
-  background: #fff7ed;           /* 薄いオレンジ系 */
+  background: #fff7ed;
   border: 1px solid #fed7aa;
   border-radius: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
-.tl-electionbar-actions { display: flex; gap: 8px; margin-left: auto; }
+.tl-electionbar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; min-width: 0; }
 .tl-electionbar-actions button {
   padding: 6px 10px;
   border: 1px solid #fdba74;

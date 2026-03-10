@@ -7,6 +7,9 @@ export interface FriendConvResult {
   consistencyDelta:  number;
   approvalDelta:     number;
   commDelta:         number;
+  affinityDelta:     number;
+  followersDelta:    number;
+  charId:            string;
   charName:          string;
 }
 
@@ -27,12 +30,16 @@ export default function FriendConversation({ char, onClose }: Props) {
     consistencyDelta:  number;
     approvalDelta:     number;
     commDelta:         number;
+    affinityDelta:     number;
+    followersDelta:    number;
   };
   const [totals, setTotals] = useState<Totals>({
     conservativeDelta: 0,
     consistencyDelta:  0,
     approvalDelta:     0,
     commDelta:         0,
+    affinityDelta:     0,
+    followersDelta:    0,
   });
 
   const totalExchanges = char.exchanges.length;
@@ -49,6 +56,8 @@ export default function FriendConversation({ char, onClose }: Props) {
       consistencyDelta:  prev.consistencyDelta  + effect.consistencyDelta,
       approvalDelta:     prev.approvalDelta     + effect.approvalDelta,
       commDelta:         prev.commDelta         + (effect.commDelta ?? 0),
+      affinityDelta:     prev.affinityDelta     + effect.affinityDelta,
+      followersDelta:    prev.followersDelta    + effect.followersDelta,
     }));
 
     setCharReply(choice.charResponse);
@@ -71,6 +80,9 @@ export default function FriendConversation({ char, onClose }: Props) {
       consistencyDelta:  totals.consistencyDelta,
       approvalDelta:     totals.approvalDelta,
       commDelta:         totals.commDelta,
+      affinityDelta:     totals.affinityDelta,
+      followersDelta:    totals.followersDelta,
+      charId:            char.id,
       charName:          char.name,
     });
   }
@@ -136,6 +148,22 @@ export default function FriendConversation({ char, onClose }: Props) {
                 <span className="fc-delta-label">コミュ力</span>
                 <span className={`fc-delta-val ${(totals.commDelta ?? 0) > 0 ? 'pos' : 'neg'}`}>
                   {(totals.commDelta ?? 0) > 0 ? '+' : ''}{totals.commDelta}
+                </span>
+              </div>
+            )}
+            {totals.affinityDelta !== 0 && (
+              <div className="fc-delta-row">
+                <span className="fc-delta-label">好感度</span>
+                <span className={`fc-delta-val ${totals.affinityDelta > 0 ? 'pos' : 'neg'}`}>
+                  {totals.affinityDelta > 0 ? '+' : ''}{totals.affinityDelta}
+                </span>
+              </div>
+            )}
+            {totals.followersDelta !== 0 && (
+              <div className="fc-delta-row">
+                <span className="fc-delta-label">フォロワー</span>
+                <span className={`fc-delta-val ${totals.followersDelta > 0 ? 'pos' : 'neg'}`}>
+                  {totals.followersDelta > 0 ? '+' : ''}{totals.followersDelta}
                 </span>
               </div>
             )}

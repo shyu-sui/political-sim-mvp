@@ -3,11 +3,12 @@ import { FRIEND_CHARS, type FriendChar } from './FriendChars';
 import './friends.css';
 
 interface Props {
-  onSelect: (char: FriendChar) => void;
-  onCancel: () => void;
+  onSelect:       (char: FriendChar) => void;
+  onCancel:       () => void;
+  charAffinities?: Record<string, number>;
 }
 
-export default function FriendSelector({ onSelect, onCancel }: Props) {
+export default function FriendSelector({ onSelect, onCancel, charAffinities = {} }: Props) {
   // ランダムに3人を選ぶ（マウント時に固定）
   const candidates = useMemo<FriendChar[]>(() => {
     const shuffled = [...FRIEND_CHARS].sort(() => Math.random() - 0.5);
@@ -36,6 +37,12 @@ export default function FriendSelector({ onSelect, onCancel }: Props) {
               <div className="fs-card-icon">{char.icon}</div>
               <div className="fs-card-name">{char.name}</div>
               <div className="fs-card-gender">{char.gender === 'male' ? '♂' : '♀'}</div>
+              <div className={`fs-card-affinity ${
+                (charAffinities[char.id] ?? 50) >= 70 ? 'high' :
+                (charAffinities[char.id] ?? 50) <= 20 ? 'low' : ''
+              }`}>
+                好感度 {charAffinities[char.id] ?? 50}
+              </div>
               <div className="fs-card-tap">話す →</div>
             </button>
           ))}

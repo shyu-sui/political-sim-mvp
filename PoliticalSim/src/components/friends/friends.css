@@ -93,6 +93,26 @@
   font-weight: 600;
 }
 
+.fs-card-affinity {
+  font-size: 0.72em;
+  color: #94a3b8;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.fs-card-affinity.high {
+  color: #4ade80;
+  background: #14532d;
+  border-color: #22c55e;
+}
+.fs-card-affinity.low {
+  color: #f87171;
+  background: #450a0a;
+  border-color: #ef4444;
+}
+
 .fs-cancel {
   background: transparent;
   color: #64748b;

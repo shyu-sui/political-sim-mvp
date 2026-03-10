@@ -35,6 +35,7 @@ import FriendSelector from './friends/FriendSelector';
 import FriendConversation from './friends/FriendConversation';
 import type { FriendConvResult } from './friends/FriendConversation';
 import type { FriendChar } from './friends/FriendChars';
+import { DEFAULT_AFFINITY, AFFINITY_HIGH_1, AFFINITY_HIGH_2, AFFINITY_LOW } from './friends/FriendChars';
 
 import StatusScreen from './status/StatusScreen';
 
@@ -157,8 +158,10 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const [showCouncilEndModal, setShowCouncilEndModal] = useState(false);
 
   // 友達会話システム
-  const [showFriendSelector, setShowFriendSelector] = useState(false);
-  const [selectedFriendChar, setSelectedFriendChar] = useState<FriendChar | null>(null);
+  const [showFriendSelector,   setShowFriendSelector]   = useState(false);
+  const [selectedFriendChar,   setSelectedFriendChar]   = useState<FriendChar | null>(null);
+  const [charAffinities,       setCharAffinities]       = useState<Record<string, number>>({});
+  const [triggeredAffinityEvt, setTriggeredAffinityEvt] = useState<Set<string>>(new Set());
 
   // マイルストーンポップアップ
   const [triggeredMilestones, setTriggeredMilestones] = useState<Set<MilestoneId>>(new Set());
@@ -301,6 +304,80 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     if (result.commDelta) {
       setStatus(s => ({ ...s, comm: clamp(s.comm + result.commDelta, 0, 100) }));
     }
+    if (result.followersDelta) {
+      setFollowers(n => Math.max(0, n + result.followersDelta));
+    }
+
+    // ---- 好感度更新 & 閾値イベント ----
+    const charId = result.charId;
+    setCharAffinities(prev => {
+      const current = prev[charId] ?? DEFAULT_AFFINITY;
+      const next    = clamp(current + result.affinityDelta, 0, 100);
+      const updated = { ...prev, [charId]: next };
+
+      setTriggeredAffinityEvt(evts => {
+        const nextEvts = new Set(evts);
+        const evtKey90 = `${charId}_high90`;
+        const evtKey70 = `${charId}_high70`;
+        const evtKey20 = `${charId}_low20`;
+
+        if (next >= AFFINITY_HIGH_2 && !nextEvts.has(evtKey90)) {
+          nextEvts.add(evtKey90);
+          // 特別支持者イベント
+          setFollowers(n => n + 500);
+          setOpinion(o => ({
+            conservative: clamp(o.conservative + 1.5, 0, 100),
+            liberal:      clamp(o.liberal      + 1.5, 0, 100),
+            apathetic:    clamp(o.apathetic    - 2,   0, 100),
+          }));
+          setMilestonePopup(`⭐ ${result.charName}が特別支持者になった！フォロワー+500、支持率UP`);
+          setEvents(prevEv => [{
+            id: crypto.randomUUID(), date: `Day ${day}`, category: 'friend',
+            title: `【特別支持者】${result.charName}が熱烈に支持してくれる`,
+            description: '長年の付き合いで信頼が最高潮に。口コミでフォロワーが500人増えました。',
+            impact: 'good', delta: { followers: 500 },
+          }, ...prevEv]);
+        } else if (next >= AFFINITY_HIGH_1 && !nextEvts.has(evtKey70)) {
+          nextEvts.add(evtKey70);
+          // 個別相談イベント
+          setBeliefScore(b => {
+            const nb = { ...b, consistency: clamp(b.consistency + 2, 0, 100) };
+            checkMilestones(nb, approvalRate);
+            return nb;
+          });
+          setOpinion(o => ({
+            conservative: clamp(o.conservative + 1, 0, 100),
+            liberal:      clamp(o.liberal      + 1, 0, 100),
+            apathetic:    clamp(o.apathetic    - 1, 0, 100),
+          }));
+          setMilestonePopup(`💬 ${result.charName}から個別相談を受けた！一貫性+2、支持率UP`);
+          setEvents(prevEv => [{
+            id: crypto.randomUUID(), date: `Day ${day}`, category: 'friend',
+            title: `【個別相談】${result.charName}から深い相談を受けた`,
+            description: '信頼関係が深まり、本音で話し合えた。一貫性と支持率が向上しました。',
+            impact: 'good',
+          }, ...prevEv]);
+        } else if (next <= AFFINITY_LOW && !nextEvts.has(evtKey20)) {
+          nextEvts.add(evtKey20);
+          // 関係悪化イベント
+          setOpinion(o => ({
+            conservative: clamp(o.conservative - 1, 0, 100),
+            liberal:      clamp(o.liberal      - 1, 0, 100),
+            apathetic:    clamp(o.apathetic    + 2, 0, 100),
+          }));
+          setMilestonePopup(`❄️ ${result.charName}との関係が悪化…支持率にも影響`);
+          setEvents(prevEv => [{
+            id: crypto.randomUUID(), date: `Day ${day}`, category: 'friend',
+            title: `【関係悪化】${result.charName}との関係がぎこちなくなった`,
+            description: '意見の食い違いが積み重なり、関係が冷えてきた。無関心層が増加しました。',
+            impact: 'bad',
+          }, ...prevEv]);
+        }
+        return nextEvts;
+      });
+
+      return updated;
+    });
 
     setEvents(prev => [{
       id: crypto.randomUUID(), date: `Day ${day}`, category: 'friend',
@@ -308,7 +385,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       description: '会話を通じてパラメータが変化しました。',
       impact: result.approvalDelta >= 0 ? 'good' : 'neutral',
       delta: {
-        cons: result.conservativeDelta !== 0 ? result.conservativeDelta : undefined,
+        cons:      result.conservativeDelta !== 0 ? result.conservativeDelta : undefined,
+        followers: result.followersDelta    !== 0 ? result.followersDelta    : undefined,
       },
     }, ...prev]);
 
@@ -745,8 +823,10 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     speechDebateCount: number;
     isCouncilor: boolean; councilTurn: number;
     triggeredMilestones: MilestoneId[];
+    charAffinities: Record<string, number>;
+    triggeredAffinityEvt: string[];
   };
-  const SAVE_KEY = 'politics-sim-save-v6';
+  const SAVE_KEY = 'politics-sim-save-v7';
 
   function saveGame() {
     const data: SaveState = {
@@ -755,6 +835,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       playerName, charType, beliefScore, scandalTriggered,
       speechDebateCount, isCouncilor, councilTurn,
       triggeredMilestones: Array.from(triggeredMilestones),
+      charAffinities,
+      triggeredAffinityEvt: Array.from(triggeredAffinityEvt),
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
   }
@@ -776,7 +858,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       if (d.speechDebateCount !== undefined) setSpeechDebateCount(d.speechDebateCount);
       if (d.isCouncilor   !== undefined) setIsCouncilor(d.isCouncilor);
       if (d.councilTurn   !== undefined) setCouncilTurn(d.councilTurn);
-      if (d.triggeredMilestones) setTriggeredMilestones(new Set(d.triggeredMilestones));
+      if (d.triggeredMilestones)   setTriggeredMilestones(new Set(d.triggeredMilestones));
+      if (d.charAffinities)        setCharAffinities(d.charAffinities);
+      if (d.triggeredAffinityEvt)  setTriggeredAffinityEvt(new Set(d.triggeredAffinityEvt));
     } catch {}
   }
 
@@ -784,6 +868,7 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     events, status, opinion, followers, day, month, year, ap,
     election, isGameOver, isCleared, beliefScore, scandalTriggered,
     speechDebateCount, isCouncilor, councilTurn, triggeredMilestones,
+    charAffinities, triggeredAffinityEvt,
   ]);
 
   React.useEffect(() => {
@@ -853,6 +938,7 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
             setSelectedFriendChar(char);
           }}
           onCancel={() => setShowFriendSelector(false)}
+          charAffinities={charAffinities}
         />
       )}
       {selectedFriendChar && (

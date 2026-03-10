@@ -37,6 +37,12 @@ import type { FriendConvResult } from './friends/FriendConversation';
 import type { FriendChar } from './friends/FriendChars';
 import { DEFAULT_AFFINITY, AFFINITY_HIGH_1, AFFINITY_HIGH_2, AFFINITY_LOW } from './friends/FriendChars';
 
+import NationalMpActions from './national/NationalMpActions';
+import type { NmpActionResult } from './national/NationalMpActions';
+import NationalEndingModal, { calcEnding } from './national/NationalEndingModal';
+import type { EndingType } from './national/NationalEndingModal';
+import { PARTIES } from './config/parties';
+
 import StatusScreen from './status/StatusScreen';
 
 export type EventCategory = 'news' | 'sns' | 'friend' | 'action' | 'system';
@@ -162,6 +168,17 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const [selectedFriendChar,   setSelectedFriendChar]   = useState<FriendChar | null>(null);
   const [charAffinities,       setCharAffinities]       = useState<Record<string, number>>({});
   const [triggeredAffinityEvt, setTriggeredAffinityEvt] = useState<Set<string>>(new Set());
+
+  // 国会議員フェーズ
+  const [isNationalMP,    setIsNationalMP]    = useState(false);
+  const [nationalTerm,    setNationalTerm]    = useState(1);
+  const [nationalTurn,    setNationalTurn]    = useState(1);
+  const [nationalMpEnded, setNationalMpEnded] = useState(false);
+  const [policyScore,     setPolicyScore]     = useState(0);
+  const [partyAffinity,   setPartyAffinity]   = useState(50);
+  const [playerPartyId,   setPlayerPartyId]   = useState('rnp');
+  const [nmpScandalCount, setNmpScandalCount] = useState(0);
+  const [nmpEndingType,   setNmpEndingType]   = useState<EndingType | null>(null);
 
   // マイルストーンポップアップ
   const [triggeredMilestones, setTriggeredMilestones] = useState<Set<MilestoneId>>(new Set());
@@ -539,6 +556,16 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     });
   };
 
+  /** 保守度スコアから所属政党を自動決定 */
+  function assignParty(conservative: number): string {
+    const sorted = [...PARTIES].sort((a, b) => {
+      const da = Math.abs(a.beliefs.conservative - conservative);
+      const db = Math.abs(b.beliefs.conservative - conservative);
+      return da - db;
+    });
+    return sorted[0].id;
+  }
+
   const handleVotingAnimClose = () => {
     if (!pendingVote) return;
     const { won, turnout, playerShare, type } = pendingVote;
@@ -562,7 +589,57 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       }
       setElection(initialElectionState());
     } else {
-      setElection(pendingVote.finalState);
+      // 衆議院選挙（初回 or 再選）
+      if (!isNationalMP && won) {
+        // 初当選 → 国会議員フェーズへ
+        const partyId = assignParty(beliefScore.conservative);
+        setIsNationalMP(true);
+        setIsCouncilor(false);
+        setNationalTerm(1);
+        setNationalTurn(1);
+        setPlayerPartyId(partyId);
+        setPartyAffinity(50);
+        setPolicyScore(0);
+        setNmpScandalCount(0);
+        setElection(initialElectionState());
+        setEvents(prev => [{
+          id: crypto.randomUUID(), date: `Y${year}-M${month}`, category: 'system',
+          title: '衆議院議員に当選！国会議員フェーズ開始',
+          description: `${PARTIES.find(p => p.id === partyId)?.name ?? ''}に所属し、国政の舞台へ。`,
+          impact: 'good',
+        }, ...prev]);
+      } else if (isNationalMP && won) {
+        // 再選
+        const newTerm = nationalTerm + 1;
+        if (newTerm >= 4) {
+          // 3期満了エンディング
+          const et = calcEnding(policyScore, approvalRate, partyAffinity, nmpScandalCount, newTerm);
+          setNmpEndingType(et);
+          setNationalMpEnded(true);
+          setIsNationalMP(false);
+        } else {
+          setNationalTerm(newTerm);
+          setNationalTurn(1);
+          setAp(TUNING.apPerDay);
+          setElection(initialElectionState());
+          setEvents(prev => [{
+            id: crypto.randomUUID(), date: `Y${year}-M${month}`, category: 'system',
+            title: `衆議院議員 第${newTerm}期 再選！`,
+            description: `引き続き国会議員として活動する。（12ターン = 1年）`,
+            impact: 'good',
+          }, ...prev]);
+        }
+      } else {
+        // 落選
+        if (isNationalMP) {
+          // 国会議員が再選失敗 → エンディング
+          const et = calcEnding(policyScore, approvalRate, partyAffinity, nmpScandalCount, nationalTerm);
+          setNmpEndingType(et);
+          setNationalMpEnded(true);
+          setIsNationalMP(false);
+        }
+        setElection(pendingVote.finalState);
+      }
     }
     setPendingVote(null);
   };
@@ -627,6 +704,60 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       playerShare: voteShare, rivalShare, turnout, won,
       finalState, type: 'house', rivalName: '山田 太郎（現職議員）',
     });
+  }
+
+  // ---------- 国会議員フェーズ：行動結果ハンドラ ----------
+  function handleNmpAction(res: NmpActionResult) {
+    setOpinion(o => ({
+      conservative: clamp(o.conservative + res.approvalDelta * 0.4, 0, 100),
+      liberal:      clamp(o.liberal      + res.approvalDelta * 0.4, 0, 100),
+      apathetic:    clamp(o.apathetic    - res.approvalDelta * 0.3, 0, 100),
+    }));
+    setBeliefScore(b => {
+      const nb = { ...b, consistency: clamp(b.consistency + res.consistencyDelta, 0, 100) };
+      checkMilestones(nb, approvalRate);
+      return nb;
+    });
+    setPartyAffinity(v => clamp(v + res.partyAffinityDelta, 0, 100));
+    if (res.followersDelta) setFollowers(n => Math.max(0, n + res.followersDelta));
+    if (res.policyScoreDelta) setPolicyScore(s => s + res.policyScoreDelta);
+    if (res.scandalOccurred)  setNmpScandalCount(c => c + 1);
+
+    setEvents(prev => [{
+      id: crypto.randomUUID(),
+      date: `Term${nationalTerm}-T${nationalTurn}`,
+      category: 'action',
+      title: res.eventTitle,
+      description: res.eventDesc,
+      impact: res.impact,
+      delta: {
+        followers: res.followersDelta !== 0 ? res.followersDelta : undefined,
+      },
+    }, ...prev]);
+
+    setAp(x => Math.max(0, x - 1));
+  }
+
+  // ---------- 国会議員フェーズ：次のターンへ ----------
+  function nextNationalTurn() {
+    if (ap > 0 || isGameOver) return;
+    const newTurn = nationalTurn + 1;
+    if (newTurn > 12) {
+      // 1年終了 → 衆議院選挙（handleHouseElection を再利用）
+      handleHouseElection();
+      setNationalTurn(1);
+    } else {
+      setNationalTurn(newTurn);
+      setAp(TUNING.apPerDay);
+      setEvents(prev => [{
+        id: crypto.randomUUID(),
+        date: `Term${nationalTerm}-T${newTurn}`,
+        category: 'system',
+        title: `第${nationalTerm}期 ターン${newTurn} 開始`,
+        description: '国会議員として次の活動を選択してください。',
+        impact: 'neutral',
+      }, ...prev]);
+    }
   }
 
   function resetAll() {
@@ -825,8 +956,11 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     triggeredMilestones: MilestoneId[];
     charAffinities: Record<string, number>;
     triggeredAffinityEvt: string[];
+    isNationalMP: boolean; nationalTerm: number; nationalTurn: number;
+    nationalMpEnded: boolean; policyScore: number; partyAffinity: number;
+    playerPartyId: string; nmpScandalCount: number; nmpEndingType: EndingType | null;
   };
-  const SAVE_KEY = 'politics-sim-save-v7';
+  const SAVE_KEY = 'politics-sim-save-v8';
 
   function saveGame() {
     const data: SaveState = {
@@ -837,6 +971,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       triggeredMilestones: Array.from(triggeredMilestones),
       charAffinities,
       triggeredAffinityEvt: Array.from(triggeredAffinityEvt),
+      isNationalMP, nationalTerm, nationalTurn, nationalMpEnded,
+      policyScore, partyAffinity, playerPartyId, nmpScandalCount, nmpEndingType,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
   }
@@ -861,6 +997,15 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       if (d.triggeredMilestones)   setTriggeredMilestones(new Set(d.triggeredMilestones));
       if (d.charAffinities)        setCharAffinities(d.charAffinities);
       if (d.triggeredAffinityEvt)  setTriggeredAffinityEvt(new Set(d.triggeredAffinityEvt));
+      if (d.isNationalMP   !== undefined) setIsNationalMP(d.isNationalMP);
+      if (d.nationalTerm   !== undefined) setNationalTerm(d.nationalTerm);
+      if (d.nationalTurn   !== undefined) setNationalTurn(d.nationalTurn);
+      if (d.nationalMpEnded !== undefined) setNationalMpEnded(d.nationalMpEnded);
+      if (d.policyScore    !== undefined) setPolicyScore(d.policyScore);
+      if (d.partyAffinity  !== undefined) setPartyAffinity(d.partyAffinity);
+      if (d.playerPartyId)                setPlayerPartyId(d.playerPartyId);
+      if (d.nmpScandalCount !== undefined) setNmpScandalCount(d.nmpScandalCount);
+      if (d.nmpEndingType)                setNmpEndingType(d.nmpEndingType);
     } catch {}
   }
 
@@ -869,6 +1014,8 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     election, isGameOver, isCleared, beliefScore, scandalTriggered,
     speechDebateCount, isCouncilor, councilTurn, triggeredMilestones,
     charAffinities, triggeredAffinityEvt,
+    isNationalMP, nationalTerm, nationalTurn, nationalMpEnded,
+    policyScore, partyAffinity, playerPartyId, nmpScandalCount, nmpEndingType,
   ]);
 
   React.useEffect(() => {
@@ -905,6 +1052,16 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
 
   return (
     <div className="tl-container">
+      {/* ---- 国会議員エンディングモーダル ---- */}
+      {nationalMpEnded && nmpEndingType && (
+        <NationalEndingModal
+          endingType={nmpEndingType}
+          policyScore={policyScore}
+          nationalTerm={nationalTerm}
+          onReturnToTitle={resetAll}
+        />
+      )}
+
       {/* ---- モーダル群 ---- */}
       {showCouncilEndModal && (
         <CouncilEndModal
@@ -1072,11 +1229,13 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       <div className="tl-goal">
         <span className="tl-goal-label">🎯 目標</span>
         <span className="tl-goal-text">
-          {isCouncilor
-            ? `市議会議員として成績を残し、国会議員になろう（衆議院議員選挙日まであと${Math.max(0, 49 - ((year - 1) * 12 + month))}カ月）`
-            : isCleared
-              ? `選挙で選ばれるように頑張ろう（選挙日まであと${TUNING.dayPerMonth - day}日）`
-              : `立候補できるように頑張ろう（公示日まであと${TUNING.dayPerMonth - day}日）`
+          {isNationalMP
+            ? `国会議員として実績を積もう（第${nationalTerm}期 ターン${nationalTurn}/12 実績${policyScore}pt）`
+            : isCouncilor
+              ? `市議会議員として成績を残し、国会議員になろう（衆議院議員選挙日まであと${Math.max(0, 49 - ((year - 1) * 12 + month))}カ月）`
+              : isCleared
+                ? `選挙で選ばれるように頑張ろう（選挙日まであと${TUNING.dayPerMonth - day}日）`
+                : `立候補できるように頑張ろう（公示日まであと${TUNING.dayPerMonth - day}日）`
           }
         </span>
       </div>
@@ -1126,8 +1285,22 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         )}
       </div>
 
+      {isNationalMP && (
+        <NationalMpActions
+          key={`nmp-${nationalTerm}-${nationalTurn}`}
+          playerPartyId={playerPartyId}
+          partyAffinity={partyAffinity}
+          policyScore={policyScore}
+          approvalRate={approvalRate}
+          consistency={beliefScore.consistency}
+          nationalTerm={nationalTerm}
+          nationalTurn={nationalTurn}
+          onAction={handleNmpAction}
+        />
+      )}
+
       <div className="tl-actions">
-        {isCouncilor ? (
+        {isNationalMP ? null : isCouncilor ? (
           <>
             <button onClick={() => addActionEvent('speech')} disabled={ap <= 0 || isGameOver}>街頭演説をする</button>
             <button onClick={() => addActionEvent('policy')} disabled={ap <= 0 || isGameOver}>政策立案</button>
@@ -1167,7 +1340,13 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         </div>
       )}
 
-      {isCouncilor ? (
+      {isNationalMP ? (
+        <button className="tl-nextperiod" onClick={nextNationalTurn} disabled={ap > 0 || isGameOver}>
+          {nationalTurn >= 12
+            ? `次のターンへ（→ 衆議院選挙）`
+            : `次のターンへ（ターン ${nationalTurn + 1} / 12）`}
+        </button>
+      ) : isCouncilor ? (
         <button className="tl-nextperiod" onClick={nextCouncilPeriod} disabled={ap > 0 || isGameOver}>
           次の期へ（4ヶ月） — 残り {12 - councilTurn} 期
         </button>

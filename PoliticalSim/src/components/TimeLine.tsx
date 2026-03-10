@@ -43,6 +43,11 @@ import NationalEndingModal, { calcEnding } from './national/NationalEndingModal'
 import type { EndingType } from './national/NationalEndingModal';
 import { PARTIES } from './config/parties';
 
+import PrimeMinisterActions from './pm/PrimeMinisterActions';
+import type { PmActionResult } from './pm/PrimeMinisterActions';
+import PrimeMinisterEndingModal, { calcPmEnding } from './pm/PrimeMinisterEndingModal';
+import type { PmEndingType } from './pm/PrimeMinisterEndingModal';
+
 import StatusScreen from './status/StatusScreen';
 
 export type EventCategory = 'news' | 'sns' | 'friend' | 'action' | 'system';
@@ -179,6 +184,18 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
   const [playerPartyId,   setPlayerPartyId]   = useState('rnp');
   const [nmpScandalCount, setNmpScandalCount] = useState(0);
   const [nmpEndingType,   setNmpEndingType]   = useState<EndingType | null>(null);
+
+  // 総理フェーズ
+  const [isPrimeMinister,    setIsPrimeMinister]    = useState(false);
+  const [cabinetTerm,        setCabinetTerm]        = useState(1);
+  const [cabinetTurn,        setCabinetTurn]        = useState(1);
+  const [pmEnded,            setPmEnded]            = useState(false);
+  const [diplomacyScore,     setDiplomacyScore]     = useState(50);
+  const [economyScore,       setEconomyScore]       = useState(50);
+  const [securityScore,      setSecurityScore]      = useState(50);
+  const [coalitionStability, setCoalitionStability] = useState(70);
+  const [pmScandalCount,     setPmScandalCount]     = useState(0);
+  const [pmEndingType,       setPmEndingType]       = useState<PmEndingType | null>(null);
 
   // マイルストーンポップアップ
   const [triggeredMilestones, setTriggeredMilestones] = useState<Set<MilestoneId>>(new Set());
@@ -760,6 +777,186 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     }
   }
 
+  // ---------- 総理フェーズ：総裁選挑戦 ----------
+  function handlePMElection() {
+    if (ap <= 0) return;
+    const successProb = policyScore / 100 * 0.3 + partyAffinity / 100 * 0.4 + approvalRate / 100 * 0.3;
+    const won = Math.random() < successProb;
+    if (won) {
+      setIsPrimeMinister(true);
+      setIsNationalMP(false);
+      setCabinetTerm(1);
+      setCabinetTurn(1);
+      setDiplomacyScore(50);
+      setEconomyScore(50);
+      setSecurityScore(50);
+      setCoalitionStability(70);
+      setPmScandalCount(0);
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date: `Y${year}-M${month}`, category: 'system',
+        title: '自民党総裁選に当選！内閣総理大臣に就任',
+        description: '国家の最高指導者として、内閣総理大臣に就任しました。',
+        impact: 'good',
+      }, ...prev]);
+    } else {
+      setPartyAffinity(v => clamp(v - 10, 0, 100));
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date: `Y${year}-M${month}`, category: 'system',
+        title: '総裁選に敗北…',
+        description: '総裁選には及ばなかった。党内での立場が少し低下した。',
+        impact: 'bad',
+      }, ...prev]);
+    }
+    setAp(x => Math.max(0, x - 1));
+  }
+
+  // ---------- 総理フェーズ：行動結果ハンドラ ----------
+  function handlePmAction(res: PmActionResult) {
+    setOpinion(o => ({
+      conservative: clamp(o.conservative + res.approvalDelta * 0.4, 0, 100),
+      liberal:      clamp(o.liberal      + res.approvalDelta * 0.4, 0, 100),
+      apathetic:    clamp(o.apathetic    - res.approvalDelta * 0.3, 0, 100),
+    }));
+    setBeliefScore(b => {
+      const nb = { ...b, consistency: clamp(b.consistency + res.consistencyDelta, 0, 100) };
+      checkMilestones(nb, approvalRate);
+      return nb;
+    });
+    setPartyAffinity(v => clamp(v + res.partyAffinityDelta, 0, 100));
+    if (res.followersDelta)   setFollowers(n => Math.max(0, n + res.followersDelta));
+    if (res.policyScoreDelta) setPolicyScore(s => s + res.policyScoreDelta);
+    setDiplomacyScore(s => clamp(s + res.diplomacyDelta, 0, 100));
+    setEconomyScore(s => clamp(s + res.economyDelta, 0, 100));
+    setSecurityScore(s => clamp(s + res.securityDelta, 0, 100));
+    setCoalitionStability(s => clamp(s + res.coalitionDelta, 0, 100));
+    if (res.pmScandalOccurred) setPmScandalCount(c => c + 1);
+    setEvents(prev => [{
+      id: crypto.randomUUID(),
+      date: `内閣${cabinetTerm}期-T${cabinetTurn}`,
+      category: 'action',
+      title: res.eventTitle,
+      description: res.eventDesc,
+      impact: res.impact,
+      delta: { followers: res.followersDelta !== 0 ? res.followersDelta : undefined },
+    }, ...prev]);
+    setAp(x => Math.max(0, x - 1));
+  }
+
+  // ---------- 総理フェーズ：次のターンへ ----------
+  const CABINET_CRISIS: Array<{
+    title: string; desc: string;
+    diplomacy?: number; economy?: number; security?: number;
+    approval?: number; partyAffinity?: number; coalition?: number;
+    scandal?: boolean;
+  }> = [
+    { title: '大規模自然災害が発生',  desc: '緊急対応を迫られ、国民の目が集まる。', economy: -3, security: -2, approval: -4 },
+    { title: '閣僚が不祥事を起こした', desc: '野党が猛攻撃。党内も動揺している。', approval: -6, partyAffinity: -5, scandal: true },
+    { title: '経済指標が急悪化',       desc: '市場も動揺。財政政策の見直しを迫られる。', economy: -8, approval: -5 },
+    { title: '国際社会で外交摩擦',     desc: '外交ルートが一時緊張状態に。', diplomacy: -5, security: -2, approval: -2 },
+    { title: '連立相手が反発',         desc: '連立の枠組みが揺らいでいる。', coalition: -12, partyAffinity: -5 },
+  ];
+
+  function nextCabinetTurn() {
+    if (ap > 0 || isGameOver) return;
+
+    // 危機イベント（20%確率）
+    if (Math.random() < 0.20) {
+      const crisis = CABINET_CRISIS[Math.floor(Math.random() * CABINET_CRISIS.length)];
+      if (crisis.diplomacy)     setDiplomacyScore(s => clamp(s + crisis.diplomacy!, 0, 100));
+      if (crisis.economy)       setEconomyScore(s => clamp(s + crisis.economy!, 0, 100));
+      if (crisis.security)      setSecurityScore(s => clamp(s + crisis.security!, 0, 100));
+      if (crisis.coalition)     setCoalitionStability(s => clamp(s + crisis.coalition!, 0, 100));
+      if (crisis.approval) {
+        const d = crisis.approval;
+        setOpinion(o => ({
+          conservative: clamp(o.conservative + d * 0.4, 0, 100),
+          liberal:      clamp(o.liberal      + d * 0.4, 0, 100),
+          apathetic:    clamp(o.apathetic    - d * 0.3, 0, 100),
+        }));
+      }
+      if (crisis.partyAffinity) setPartyAffinity(v => clamp(v + crisis.partyAffinity!, 0, 100));
+      if (crisis.scandal)       setPmScandalCount(c => c + 1);
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date: `内閣${cabinetTerm}期-T${cabinetTurn}`, category: 'system',
+        title: `【危機】${crisis.title}`,
+        description: crisis.desc,
+        impact: 'bad',
+      }, ...prev]);
+    }
+
+    // 支持率急落チェック
+    if (approvalRate < 10) {
+      const et = calcPmEnding(diplomacyScore, economyScore, securityScore, approvalRate, coalitionStability, pmScandalCount, cabinetTerm);
+      setPmEndingType(et);
+      setPmEnded(true);
+      setIsPrimeMinister(false);
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date: `内閣${cabinetTerm}期-T${cabinetTurn}`, category: 'system',
+        title: '支持率の急落で自発的に辞任',
+        description: '国民の信任を失い、総辞職を余儀なくされた。',
+        impact: 'bad',
+      }, ...prev]);
+      setAp(TUNING.apPerDay);
+      return;
+    }
+
+    const newTurn = cabinetTurn + 1;
+    if (newTurn > 12) {
+      const newCabinetTerm = cabinetTerm + 1;
+      setCabinetTerm(newCabinetTerm);
+      setCabinetTurn(1);
+
+      // 不信任チェック
+      if (coalitionStability < 25 && Math.random() < 0.6) {
+        const et = calcPmEnding(diplomacyScore, economyScore, securityScore, approvalRate, coalitionStability, pmScandalCount, cabinetTerm);
+        setPmEndingType(et);
+        setPmEnded(true);
+        setIsPrimeMinister(false);
+        setEvents(prev => [{
+          id: crypto.randomUUID(), date: `内閣${cabinetTerm}期`, category: 'system',
+          title: '内閣不信任案が可決…総辞職',
+          description: '連立の崩壊により、内閣不信任案が可決されました。',
+          impact: 'bad',
+        }, ...prev]);
+        setAp(TUNING.apPerDay);
+        return;
+      }
+
+      // 3期超えチェック
+      if (newCabinetTerm >= 4) {
+        const et = calcPmEnding(diplomacyScore, economyScore, securityScore, approvalRate, coalitionStability, pmScandalCount, cabinetTerm);
+        setPmEndingType(et);
+        setPmEnded(true);
+        setIsPrimeMinister(false);
+        setEvents(prev => [{
+          id: crypto.randomUUID(), date: `内閣${cabinetTerm}期`, category: 'system',
+          title: '3期を超える長期政権が終幕',
+          description: '歴史に名を刻む長期政権でした。お疲れさまでした。',
+          impact: 'good',
+        }, ...prev]);
+        setAp(TUNING.apPerDay);
+        return;
+      }
+
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date: `内閣${newCabinetTerm}期`, category: 'system',
+        title: `第${newCabinetTerm}次内閣発足`,
+        description: '新たな内閣として引き続き国家運営にあたる。',
+        impact: 'good',
+      }, ...prev]);
+    } else {
+      setCabinetTurn(newTurn);
+      setEvents(prev => [{
+        id: crypto.randomUUID(), date: `内閣${cabinetTerm}期-T${newTurn}`, category: 'system',
+        title: `内閣第${cabinetTerm}期 ターン${newTurn} 開始`,
+        description: '総理大臣として次の政策を選択してください。',
+        impact: 'neutral',
+      }, ...prev]);
+    }
+
+    setAp(TUNING.apPerDay);
+  }
+
   function resetAll() {
     localStorage.removeItem(SAVE_KEY);
     onReturnToStart();
@@ -959,8 +1156,12 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     isNationalMP: boolean; nationalTerm: number; nationalTurn: number;
     nationalMpEnded: boolean; policyScore: number; partyAffinity: number;
     playerPartyId: string; nmpScandalCount: number; nmpEndingType: EndingType | null;
+    isPrimeMinister: boolean; cabinetTerm: number; cabinetTurn: number;
+    pmEnded: boolean; diplomacyScore: number; economyScore: number;
+    securityScore: number; coalitionStability: number; pmScandalCount: number;
+    pmEndingType: PmEndingType | null;
   };
-  const SAVE_KEY = 'politics-sim-save-v8';
+  const SAVE_KEY = 'politics-sim-save-v9';
 
   function saveGame() {
     const data: SaveState = {
@@ -973,6 +1174,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       triggeredAffinityEvt: Array.from(triggeredAffinityEvt),
       isNationalMP, nationalTerm, nationalTurn, nationalMpEnded,
       policyScore, partyAffinity, playerPartyId, nmpScandalCount, nmpEndingType,
+      isPrimeMinister, cabinetTerm, cabinetTurn, pmEnded,
+      diplomacyScore, economyScore, securityScore, coalitionStability,
+      pmScandalCount, pmEndingType,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
   }
@@ -1006,6 +1210,16 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       if (d.playerPartyId)                setPlayerPartyId(d.playerPartyId);
       if (d.nmpScandalCount !== undefined) setNmpScandalCount(d.nmpScandalCount);
       if (d.nmpEndingType)                setNmpEndingType(d.nmpEndingType);
+      if (d.isPrimeMinister   !== undefined) setIsPrimeMinister(d.isPrimeMinister);
+      if (d.cabinetTerm       !== undefined) setCabinetTerm(d.cabinetTerm);
+      if (d.cabinetTurn       !== undefined) setCabinetTurn(d.cabinetTurn);
+      if (d.pmEnded           !== undefined) setPmEnded(d.pmEnded);
+      if (d.diplomacyScore    !== undefined) setDiplomacyScore(d.diplomacyScore);
+      if (d.economyScore      !== undefined) setEconomyScore(d.economyScore);
+      if (d.securityScore     !== undefined) setSecurityScore(d.securityScore);
+      if (d.coalitionStability !== undefined) setCoalitionStability(d.coalitionStability);
+      if (d.pmScandalCount    !== undefined) setPmScandalCount(d.pmScandalCount);
+      if (d.pmEndingType)                    setPmEndingType(d.pmEndingType);
     } catch {}
   }
 
@@ -1016,6 +1230,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
     charAffinities, triggeredAffinityEvt,
     isNationalMP, nationalTerm, nationalTurn, nationalMpEnded,
     policyScore, partyAffinity, playerPartyId, nmpScandalCount, nmpEndingType,
+    isPrimeMinister, cabinetTerm, cabinetTurn, pmEnded,
+    diplomacyScore, economyScore, securityScore, coalitionStability,
+    pmScandalCount, pmEndingType,
   ]);
 
   React.useEffect(() => {
@@ -1052,6 +1269,18 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
 
   return (
     <div className="tl-container">
+      {/* ---- 総理エンディングモーダル ---- */}
+      {pmEnded && pmEndingType && (
+        <PrimeMinisterEndingModal
+          endingType={pmEndingType}
+          cabinetTerm={cabinetTerm}
+          diplomacyScore={diplomacyScore}
+          economyScore={economyScore}
+          securityScore={securityScore}
+          onReturnToTitle={resetAll}
+        />
+      )}
+
       {/* ---- 国会議員エンディングモーダル ---- */}
       {nationalMpEnded && nmpEndingType && (
         <NationalEndingModal
@@ -1229,7 +1458,9 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
       <div className="tl-goal">
         <span className="tl-goal-label">🎯 目標</span>
         <span className="tl-goal-text">
-          {isNationalMP
+          {isPrimeMinister
+            ? `総理大臣として国家を運営しよう（第${cabinetTerm}次内閣 T${cabinetTurn}/12 外交${Math.floor(diplomacyScore)} 経済${Math.floor(economyScore)} 安保${Math.floor(securityScore)} 連立${Math.floor(coalitionStability)}）`
+            : isNationalMP
             ? `国会議員として実績を積もう（第${nationalTerm}期 ターン${nationalTurn}/12 実績${policyScore}pt）`
             : isCouncilor
               ? `市議会議員として成績を残し、国会議員になろう（衆議院議員選挙日まであと${Math.max(0, 49 - ((year - 1) * 12 + month))}カ月）`
@@ -1285,22 +1516,49 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         )}
       </div>
 
-      {isNationalMP && (
-        <NationalMpActions
-          key={`nmp-${nationalTerm}-${nationalTurn}`}
-          playerPartyId={playerPartyId}
-          partyAffinity={partyAffinity}
-          policyScore={policyScore}
-          approvalRate={approvalRate}
-          consistency={beliefScore.consistency}
-          nationalTerm={nationalTerm}
-          nationalTurn={nationalTurn}
-          onAction={handleNmpAction}
+      {isPrimeMinister && (
+        <PrimeMinisterActions
+          key={`pm-${cabinetTerm}-${cabinetTurn}`}
+          cabinetTerm={cabinetTerm}
+          cabinetTurn={cabinetTurn}
+          coalitionStability={coalitionStability}
+          diplomacyScore={diplomacyScore}
+          economyScore={economyScore}
+          securityScore={securityScore}
+          onAction={handlePmAction}
         />
       )}
 
+      {isNationalMP && (
+        <>
+          <NationalMpActions
+            key={`nmp-${nationalTerm}-${nationalTurn}`}
+            playerPartyId={playerPartyId}
+            partyAffinity={partyAffinity}
+            policyScore={policyScore}
+            approvalRate={approvalRate}
+            consistency={beliefScore.consistency}
+            nationalTerm={nationalTerm}
+            nationalTurn={nationalTurn}
+            onAction={handleNmpAction}
+          />
+          {policyScore >= 20 && partyAffinity >= 60 && (
+            <div className="tl-pmbar">
+              <span>🏛️ 総裁選への出馬条件を満たしました！</span>
+              <span className="pm-score-chip">実績 {policyScore}pt</span>
+              <span className="pm-coalition-chip">党内支持 {Math.floor(partyAffinity)}</span>
+              <div className="tl-pmbar-actions">
+                <button onClick={handlePMElection} disabled={ap <= 0 || isGameOver}>
+                  総裁選に出馬（AP1）
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       <div className="tl-actions">
-        {isNationalMP ? null : isCouncilor ? (
+        {isPrimeMinister ? null : isNationalMP ? null : isCouncilor ? (
           <>
             <button onClick={() => addActionEvent('speech')} disabled={ap <= 0 || isGameOver}>街頭演説をする</button>
             <button onClick={() => addActionEvent('policy')} disabled={ap <= 0 || isGameOver}>政策立案</button>
@@ -1340,7 +1598,13 @@ export default function Timeline({ initialConfig, onReturnToStart }: TimelinePro
         </div>
       )}
 
-      {isNationalMP ? (
+      {isPrimeMinister ? (
+        <button className="tl-nextperiod" onClick={nextCabinetTurn} disabled={ap > 0 || isGameOver}>
+          {cabinetTurn >= 12
+            ? `次の期へ（→ 第${cabinetTerm + 1}次内閣）`
+            : `次のターンへ（T${cabinetTurn + 1} / 12）`}
+        </button>
+      ) : isNationalMP ? (
         <button className="tl-nextperiod" onClick={nextNationalTurn} disabled={ap > 0 || isGameOver}>
           {nationalTurn >= 12
             ? `次のターンへ（→ 衆議院選挙）`
